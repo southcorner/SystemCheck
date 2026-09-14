@@ -38,6 +38,7 @@ func (a *App) Router() http.Handler {
 
 	// Agent endpoints (mTLS for all but enroll).
 	mux.HandleFunc("POST /v1/enroll", a.handleEnroll)
+	mux.Handle("GET /v1/agent-version", a.agentAuth(http.HandlerFunc(a.handleAgentVersion)))
 	mux.Handle("GET /v1/policy", a.agentAuth(http.HandlerFunc(a.handlePolicy)))
 	mux.Handle("POST /v1/ingest", a.agentAuth(http.HandlerFunc(a.handleIngest)))
 	mux.Handle("POST /v1/screenshots", a.agentAuth(http.HandlerFunc(a.handleScreenshotUpload)))
@@ -66,6 +67,17 @@ func (a *App) Router() http.Handler {
 	mux.Handle("POST /api/alerts/{id}/ack", a.adminAuth(true, http.HandlerFunc(a.handleAckAlert)))
 	mux.Handle("GET /api/alert-rules", a.adminAuth(true, http.HandlerFunc(a.handleListAlertRules)))
 	mux.Handle("POST /api/alert-rules", a.adminAuth(true, a.requireRole("admin", "", http.HandlerFunc(a.handleCreateAlertRule))))
+
+	// Admin user management (admin only).
+	mux.Handle("GET /api/users", a.adminAuth(true, a.requireRole("admin", "", http.HandlerFunc(a.handleListUsers))))
+	mux.Handle("POST /api/users", a.adminAuth(true, a.requireRole("admin", "", http.HandlerFunc(a.handleCreateUser))))
+	mux.Handle("POST /api/users/{id}/role", a.adminAuth(true, a.requireRole("admin", "", http.HandlerFunc(a.handleSetUserRole))))
+	mux.Handle("POST /api/users/{id}/disable", a.adminAuth(true, a.requireRole("admin", "", http.HandlerFunc(a.handleDisableUser))))
+
+	// Dual-approval view requests.
+	mux.Handle("GET /api/view-requests", a.adminAuth(true, http.HandlerFunc(a.handleListViewRequests)))
+	mux.Handle("POST /api/view-requests", a.adminAuth(true, http.HandlerFunc(a.handleCreateViewRequest)))
+	mux.Handle("POST /api/view-requests/{id}/approve", a.adminAuth(true, http.HandlerFunc(a.handleApproveViewRequest)))
 
 	// Enrollment token minting + consent + policy management (admin only).
 	mux.Handle("POST /api/enroll-tokens", a.adminAuth(true, a.requireRole("admin", "", http.HandlerFunc(a.handleCreateEnrollToken))))

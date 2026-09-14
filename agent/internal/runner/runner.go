@@ -18,6 +18,7 @@ import (
 	"github.com/southcorner/systemcheck/agent/internal/collectors/posture"
 	"github.com/southcorner/systemcheck/agent/internal/collectors/printjobs"
 	"github.com/southcorner/systemcheck/agent/internal/collectors/screenshot"
+	"github.com/southcorner/systemcheck/agent/internal/collectors/seclog"
 	"github.com/southcorner/systemcheck/agent/internal/collectors/usb"
 	"github.com/southcorner/systemcheck/agent/internal/config"
 	"github.com/southcorner/systemcheck/agent/internal/enroll"
@@ -150,6 +151,9 @@ func startCollectors(ctx context.Context, pol wire.Policy, emit collectors.Emit,
 	}
 	if pol.Posture.Enabled {
 		active = append(active, posture.New(pol.Posture))
+	}
+	if pol.Seclog.Enabled {
+		active = append(active, seclog.New(pol.Seclog))
 	}
 	for _, c := range active {
 		c := c

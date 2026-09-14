@@ -51,6 +51,7 @@ Response `200`:
   "printjobs":  { "enabled": false },
   "installs":   { "enabled": false },
   "posture":    { "enabled": false, "interval_sec": 3600 },
+  "seclog":     { "enabled": false },
   "exclusions": { "domains": ["*.bank.example"], "processes": ["1password.exe"] },
   "heartbeat_sec": 60
 }
@@ -85,6 +86,17 @@ Uploads a screenshot blob (referenced by `object_key`). `multipart/form-data` wi
 fields `object_key` and `file`. Server stores it in MinIO (encrypted) and links it to
 the metadata event.
 
+## GET /v1/agent-version
+
+Advertises the latest agent release for update checks (mTLS). Read-only.
+
+Response `200`:
+```json
+{ "version": "0.2.0", "url": "https://.../agent-0.2.0.exe", "signature": "base64-ed25519-sig" }
+```
+A future agent self-updater downloads `url`, verifies `signature` against a pinned
+public key, then swaps the binary and restarts the service.
+
 ## POST /v1/heartbeat
 
 ```json
@@ -95,5 +107,6 @@ Response `200`: `{ "ok": true }`
 ## Event kinds (extensible)
 
 `foreground`, `screenshot`, `dns`, `netflow`, `download`, `upload`, `usb`,
-`printjob`, `posture`, `seclog`, `install`. Unknown kinds are stored with their JSONB
-`data` for forward compatibility.
+`printjob`, `posture`, `install`, `seclog`. Unknown kinds are stored with their JSONB
+`data` for forward compatibility. `seclog` data carries `{event_id, kind:logon|
+failed_logon|priv, account, logon_type, source_ip, record_id}`.

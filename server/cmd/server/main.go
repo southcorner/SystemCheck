@@ -63,6 +63,8 @@ func main() {
 		log.Fatalf("tls: %v", err)
 	}
 
+	go runPurgeLoop(ctx, st, bl, cfg)
+
 	srv := &http.Server{
 		Addr:              cfg.ListenAddr,
 		Handler:           app.Router(),
@@ -84,6 +86,33 @@ func main() {
 	shutCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	_ = srv.Shutdown(shutCtx)
+}
+
+// runPurgeLoop enforces retention windows once at startup and then daily.
+func runPurgeLoop(ctx context.Context, st *store.Store, bl *blob.FSStore, cfg *config.Config) {
+	purge := func() {
+		cutoffs := store.RetentionCutoffs(time.Now(),
+			cfg.RetentionScreenshotsDays, cfg.RetentionActivityDays,
+			cfg.RetentionSecurityDays, cfg.RetentionAuditDays)
+		res, err := st.Purge(ctx, cutoffs, bl.Delete)
+		if err != nil {
+			log.Printf("purge error: %v", err)
+			return
+		}
+		log.Printf("retention purge: events=%d screenshots=%d app_usage=%d audit=%d",
+			res.Events, res.Screenshots, res.AppUsage, res.Audit)
+	}
+	purge()
+	ticker := time.NewTicker(24 * time.Hour)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			purge()
+		}
+	}
 }
 
 // bootstrapAdmin creates the first admin from env if no admins exist yet.

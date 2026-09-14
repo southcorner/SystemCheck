@@ -36,6 +36,25 @@ export type DownloadRow = {
 };
 export type EventRow = { ts: string; kind: string; data: Record<string, any> };
 
+export type AdminUser = {
+  id: string;
+  email: string;
+  role: string;
+  mfa_enabled: boolean;
+  disabled: boolean;
+};
+
+export type ViewRequest = {
+  id: string;
+  machine_id: string;
+  requested_by: string;
+  reason: string;
+  approved_by: string;
+  created_at: string;
+  approved_at: string | null;
+  expires_at: string;
+};
+
 export type Alert = {
   id: string;
   machine_id: string;
@@ -88,6 +107,34 @@ export const api = {
   ackAlert: (id: string) =>
     req<{ ok: boolean }>(`/api/alerts/${id}/ack`, { method: "POST" }),
   imageURL: (screenshotID: string) => `/api/screenshots/${screenshotID}/image`,
+
+  // User management (admin only).
+  users: () => req<AdminUser[]>("/api/users"),
+  createUser: (email: string, password: string, role: string) =>
+    req<{ id: string }>("/api/users", {
+      method: "POST",
+      body: JSON.stringify({ email, password, role }),
+    }),
+  setUserRole: (id: string, role: string) =>
+    req<{ ok: boolean }>(`/api/users/${id}/role`, {
+      method: "POST",
+      body: JSON.stringify({ role }),
+    }),
+  disableUser: (id: string, disabled: boolean) =>
+    req<{ ok: boolean }>(`/api/users/${id}/disable`, {
+      method: "POST",
+      body: JSON.stringify({ disabled }),
+    }),
+
+  // Dual-approval view requests.
+  viewRequests: () => req<ViewRequest[]>("/api/view-requests"),
+  requestView: (machineID: string, reason: string) =>
+    req<{ id: string }>("/api/view-requests", {
+      method: "POST",
+      body: JSON.stringify({ machine_id: machineID, reason }),
+    }),
+  approveView: (id: string) =>
+    req<{ ok: boolean }>(`/api/view-requests/${id}/approve`, { method: "POST" }),
 };
 
 // formatBytes renders a byte count in human units.

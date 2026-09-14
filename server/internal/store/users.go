@@ -73,6 +73,56 @@ func (s *Store) GetAdminByID(ctx context.Context, id string) (*AdminUser, error)
 	return u, nil
 }
 
+// AdminSummary is a non-sensitive admin listing row.
+type AdminSummary struct {
+	ID         string     `json:"id"`
+	Email      string     `json:"email"`
+	Role       model.Role `json:"role"`
+	MFAEnabled bool       `json:"mfa_enabled"`
+	Disabled   bool       `json:"disabled"`
+}
+
+// ListAdmins returns all admin accounts (no secrets).
+func (s *Store) ListAdmins(ctx context.Context) ([]AdminSummary, error) {
+	rows, err := s.Pool.Query(ctx,
+		`SELECT id, email, role, mfa_enabled, disabled FROM admin_users ORDER BY email`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []AdminSummary
+	for rows.Next() {
+		var a AdminSummary
+		var role string
+		if err := rows.Scan(&a.ID, &a.Email, &role, &a.MFAEnabled, &a.Disabled); err != nil {
+			return nil, err
+		}
+		a.Role = model.Role(role)
+		out = append(out, a)
+	}
+	return out, rows.Err()
+}
+
+// CountEnabledAdmins counts non-disabled users with the admin role.
+func (s *Store) CountEnabledAdmins(ctx context.Context) (int, error) {
+	var n int
+	err := s.Pool.QueryRow(ctx,
+		`SELECT count(*) FROM admin_users WHERE role='admin' AND disabled=FALSE`).Scan(&n)
+	return n, err
+}
+
+// SetRole updates a user's role.
+func (s *Store) SetRole(ctx context.Context, userID string, role model.Role) error {
+	_, err := s.Pool.Exec(ctx, `UPDATE admin_users SET role=$2 WHERE id=$1`, userID, string(role))
+	return err
+}
+
+// SetDisabled enables/disables a user account.
+func (s *Store) SetDisabled(ctx context.Context, userID string, disabled bool) error {
+	_, err := s.Pool.Exec(ctx, `UPDATE admin_users SET disabled=$2 WHERE id=$1`, userID, disabled)
+	return err
+}
+
 // SetTOTPSecret stores a (not yet enabled) TOTP secret for a user.
 func (s *Store) SetTOTPSecret(ctx context.Context, userID, secret string) error {
 	_, err := s.Pool.Exec(ctx,

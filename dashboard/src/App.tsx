@@ -9,6 +9,8 @@ import {
   DownloadRow,
   EventRow,
   Alert,
+  AdminUser,
+  ViewRequest,
   formatBytes,
 } from "./api";
 
@@ -114,16 +116,24 @@ function MFA({
   );
 }
 
-type TopView = "machines" | "alerts";
+type TopView = "machines" | "alerts" | "approvals" | "users";
 
 function Dashboard({ onLogout }: { onLogout: () => void }) {
   const [machines, setMachines] = useState<Machine[]>([]);
   const [selected, setSelected] = useState<Machine | null>(null);
   const [view, setView] = useState<TopView>("machines");
+  const [role, setRole] = useState<string>("viewer");
 
   useEffect(() => {
     api.machines().then(setMachines).catch(() => setMachines([]));
+    api.me().then((m) => setRole(m.role)).catch(() => setRole("viewer"));
   }, []);
+
+  const navBtn = (v: TopView, label: string) => (
+    <button className={"link" + (view === v ? " sel" : "")} onClick={() => setView(v)}>
+      {label}
+    </button>
+  );
 
   return (
     <div className="layout">
@@ -131,12 +141,10 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
         <strong>SystemCheck</strong>
         <span className="muted">transparent endpoint monitoring</span>
         <nav>
-          <button className={"link" + (view === "machines" ? " sel" : "")} onClick={() => setView("machines")}>
-            Machines
-          </button>
-          <button className={"link" + (view === "alerts" ? " sel" : "")} onClick={() => setView("alerts")}>
-            Alerts
-          </button>
+          {navBtn("machines", "Machines")}
+          {navBtn("alerts", "Alerts")}
+          {navBtn("approvals", "Approvals")}
+          {role === "admin" && navBtn("users", "Users")}
         </nav>
         <button
           className="link right"
@@ -148,9 +156,10 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
           Sign out
         </button>
       </header>
-      {view === "alerts" ? (
-        <AlertsView />
-      ) : (
+      {view === "alerts" && <AlertsView />}
+      {view === "approvals" && <ApprovalsView />}
+      {view === "users" && <UsersView />}
+      {view === "machines" && (
         <div className="body">
           <aside>
             <h3>Machines</h3>
@@ -233,9 +242,49 @@ function AppsTab({ id }: { id: string }) {
 
 function ScreenshotsTab({ id }: { id: string }) {
   const [shots, setShots] = useState<ScreenshotMeta[]>([]);
-  useEffect(() => {
-    api.screenshots(id).then(setShots).catch(() => setShots([]));
-  }, [id]);
+  const [needApproval, setNeedApproval] = useState(false);
+  const [requested, setRequested] = useState(false);
+
+  const load = () => {
+    api
+      .screenshots(id)
+      .then((s) => {
+        setShots(s);
+        setNeedApproval(false);
+      })
+      .catch((err) => {
+        if ((err as Error).message === "approval_required") setNeedApproval(true);
+        else setShots([]);
+      });
+  };
+  useEffect(load, [id]);
+
+  if (needApproval) {
+    return (
+      <div className="approval-gate">
+        <p>
+          Viewing this person's screenshots requires a second administrator's approval
+          (dual control). Every view is recorded in the audit log.
+        </p>
+        {requested ? (
+          <p className="muted">Access requested. Ask another admin to approve it under Approvals, then reload.</p>
+        ) : (
+          <button
+            onClick={async () => {
+              await api.requestView(id, "screenshot review");
+              setRequested(true);
+            }}
+          >
+            Request access
+          </button>
+        )}
+        <button className="link" onClick={load}>
+          Reload
+        </button>
+      </div>
+    );
+  }
+
   if (shots.length === 0) return <p className="muted">No screenshots in range.</p>;
   return (
     <div className="grid">
@@ -342,12 +391,14 @@ function SecurityTab({ id }: { id: string }) {
   const [prints, setPrints] = useState<EventRow[]>([]);
   const [installs, setInstalls] = useState<EventRow[]>([]);
   const [posture, setPosture] = useState<EventRow[]>([]);
+  const [seclog, setSeclog] = useState<EventRow[]>([]);
 
   useEffect(() => {
     api.events(id, "usb").then(setUsb).catch(() => setUsb([]));
     api.events(id, "printjob").then(setPrints).catch(() => setPrints([]));
     api.events(id, "install").then(setInstalls).catch(() => setInstalls([]));
     api.events(id, "posture").then(setPosture).catch(() => setPosture([]));
+    api.events(id, "seclog").then(setSeclog).catch(() => setSeclog([]));
   }, [id]);
 
   const latest = posture[0]?.data;
@@ -423,12 +474,148 @@ function SecurityTab({ id }: { id: string }) {
           </table>
         )}
       </section>
+
+      <section>
+        <h3>Sign-in events</h3>
+        {seclog.length === 0 && <p className="muted">No sign-in events (enable security log in policy).</p>}
+        {seclog.length > 0 && (
+          <table>
+            <tbody>
+              {seclog.map((e, i) => (
+                <tr key={i}>
+                  <td>{String(e.data.kind ?? "")}</td>
+                  <td className="mono">{String(e.data.account ?? "")}</td>
+                  <td className="small">{String(e.data.source_ip ?? "")}</td>
+                  <td className="right small">{new Date(e.ts).toLocaleString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </section>
     </div>
   );
 }
 
 function Badge({ ok, label }: { ok: boolean; label: string }) {
   return <span className={"badge " + (ok ? "badge-ok" : "badge-bad")}>{label}</span>;
+}
+
+function UsersView() {
+  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [role, setRole] = useState("viewer");
+  const [error, setError] = useState("");
+  const load = () => api.users().then(setUsers).catch(() => setUsers([]));
+  useEffect(() => { load(); }, []);
+
+  const create = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError("");
+    try {
+      await api.createUser(email, password, role);
+      setEmail("");
+      setPassword("");
+      load();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  };
+
+  return (
+    <div className="pad">
+      <h2>Administrators</h2>
+      <table>
+        <thead>
+          <tr>
+            <th className="left">Email</th>
+            <th className="left">Role</th>
+            <th className="left">MFA</th>
+            <th className="right">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {users.map((u) => (
+            <tr key={u.id} className={u.disabled ? "muted" : ""}>
+              <td className="mono">{u.email}</td>
+              <td>
+                <select value={u.role} onChange={async (e) => { await api.setUserRole(u.id, e.target.value); load(); }}>
+                  <option value="admin">admin</option>
+                  <option value="auditor">auditor</option>
+                  <option value="viewer">viewer</option>
+                </select>
+              </td>
+              <td>{u.mfa_enabled ? "on" : "off"}</td>
+              <td className="right">
+                <button className="link" onClick={async () => { await api.disableUser(u.id, !u.disabled); load(); }}>
+                  {u.disabled ? "Enable" : "Disable"}
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      <h3>Add administrator</h3>
+      <form className="row" onSubmit={create}>
+        <input placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} />
+        <input placeholder="Temp password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+        <select value={role} onChange={(e) => setRole(e.target.value)}>
+          <option value="admin">admin</option>
+          <option value="auditor">auditor</option>
+          <option value="viewer">viewer</option>
+        </select>
+        <button type="submit">Add</button>
+      </form>
+      {error && <div className="error">{error}</div>}
+    </div>
+  );
+}
+
+function ApprovalsView() {
+  const [rows, setRows] = useState<ViewRequest[]>([]);
+  const load = () => api.viewRequests().then(setRows).catch(() => setRows([]));
+  useEffect(() => { load(); }, []);
+  const active = (r: ViewRequest) =>
+    r.approved_by && new Date(r.expires_at) > new Date();
+  return (
+    <div className="pad">
+      <h2>Screenshot view requests</h2>
+      <p className="muted">
+        Viewing an individual's screenshots requires approval by a different administrator.
+      </p>
+      {rows.length === 0 && <p className="muted">No requests.</p>}
+      <table>
+        <thead>
+          <tr>
+            <th className="left">Requested by</th>
+            <th className="left">Machine</th>
+            <th className="left">Reason</th>
+            <th className="left">Status</th>
+            <th className="right">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r.id}>
+              <td className="mono">{r.requested_by}</td>
+              <td className="mono small">{r.machine_id.slice(0, 8)}</td>
+              <td>{r.reason}</td>
+              <td>{active(r) ? "approved" : r.approved_by ? "expired" : "pending"}</td>
+              <td className="right">
+                {!r.approved_by && (
+                  <button className="link" onClick={async () => { await api.approveView(r.id); load(); }}>
+                    Approve
+                  </button>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
 }
 
 function AlertsView() {

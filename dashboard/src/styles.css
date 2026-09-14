@@ -48,3 +48,8 @@ th.left, td.left { text-align: left; }
 .badge-ok { background: #14351f; color: #7ee2a8; }
 .badge-bad { background: #3a1414; color: #ff9a9a; }
 section { margin-bottom: 22px; }
+
+/* Phase 4 additions */
+.approval-gate { max-width: 520px; background: #171a21; padding: 18px; border-radius: 10px; display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 8px 0; }
+select { padding: 8px; border-radius: 8px; border: 1px solid #2a2f3a; background: #0f1115; color: inherit; }

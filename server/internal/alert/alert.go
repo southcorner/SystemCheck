@@ -105,6 +105,15 @@ func Evaluate(rules []store.AlertRule, e model.Event) []Match {
 				Message: fmt.Sprintf("Removable media inserted: %s (%s)", str(e.Data["drive"]), str(e.Data["label"])),
 				Data:    map[string]interface{}{"drive": str(e.Data["drive"]), "label": str(e.Data["label"]), "serial": str(e.Data["serial"])},
 			})
+		case "failed_logon":
+			if e.Kind != "seclog" || str(e.Data["kind"]) != "failed_logon" {
+				continue
+			}
+			matches = append(matches, Match{
+				RuleID: r.ID, Severity: "warning",
+				Message: fmt.Sprintf("Failed sign-in: account %s (type %s)", str(e.Data["account"]), str(e.Data["logon_type"])),
+				Data:    map[string]interface{}{"account": str(e.Data["account"]), "source_ip": str(e.Data["source_ip"]), "logon_type": str(e.Data["logon_type"])},
+			})
 		case "new_install":
 			if e.Kind != "install" {
 				continue

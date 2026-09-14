@@ -48,6 +48,7 @@ type Policy struct {
 	PrintJobs    TogglePolicy     `json:"printjobs"`
 	Installs     TogglePolicy     `json:"installs"`
 	Posture      PosturePolicy    `json:"posture"`
+	Seclog       TogglePolicy     `json:"seclog"`
 	Exclusions   Exclusions       `json:"exclusions"`
 	HeartbeatSec int              `json:"heartbeat_sec"`
 }
@@ -154,6 +155,7 @@ func DefaultPolicy() Policy {
 		PrintJobs:    TogglePolicy{Enabled: false},
 		Installs:     TogglePolicy{Enabled: false},
 		Posture:      PosturePolicy{Enabled: false, IntervalSec: 3600},
+		Seclog:       TogglePolicy{Enabled: false},
 		HeartbeatSec: 60,
 	}
 }

@@ -4,6 +4,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strconv"
 )
 
 // Config holds all server configuration.
@@ -28,6 +29,21 @@ type Config struct {
 
 	BootstrapAdminEmail    string
 	BootstrapAdminPassword string
+
+	// Retention windows in days per data class (0 disables purge for that class).
+	RetentionScreenshotsDays int
+	RetentionActivityDays    int // app usage, domains, transfers, downloads
+	RetentionSecurityDays    int // usb, printjob, install, posture, seclog
+	RetentionAuditDays       int
+
+	// RequireDualApproval gates viewing an individual's screenshots on a second
+	// admin's approval.
+	RequireDualApproval bool
+
+	// Agent release advertisement (see GET /v1/agent-version).
+	AgentLatestVersion string
+	AgentDownloadURL   string
+	AgentSignatureB64  string // ed25519 signature of the release, base64
 }
 
 // Load reads configuration from environment variables, applying defaults.
@@ -48,6 +64,17 @@ func Load() (*Config, error) {
 		EnrollSecret:           env("SC_ENROLL_SECRET", ""),
 		BootstrapAdminEmail:    env("SC_BOOTSTRAP_ADMIN_EMAIL", ""),
 		BootstrapAdminPassword: env("SC_BOOTSTRAP_ADMIN_PASSWORD", ""),
+
+		RetentionScreenshotsDays: envInt("SC_RETENTION_SCREENSHOTS_DAYS", 30),
+		RetentionActivityDays:    envInt("SC_RETENTION_ACTIVITY_DAYS", 90),
+		RetentionSecurityDays:    envInt("SC_RETENTION_SECURITY_DAYS", 180),
+		RetentionAuditDays:       envInt("SC_RETENTION_AUDIT_DAYS", 365),
+
+		RequireDualApproval: env("SC_REQUIRE_DUAL_APPROVAL", "false") == "true",
+
+		AgentLatestVersion: env("SC_AGENT_LATEST_VERSION", ""),
+		AgentDownloadURL:   env("SC_AGENT_DOWNLOAD_URL", ""),
+		AgentSignatureB64:  env("SC_AGENT_SIGNATURE_B64", ""),
 	}
 
 	host := env("DB_HOST", "127.0.0.1")
@@ -66,6 +93,15 @@ func Load() (*Config, error) {
 func env(key, def string) string {
 	if v, ok := os.LookupEnv(key); ok && v != "" {
 		return v
+	}
+	return def
+}
+
+func envInt(key string, def int) int {
+	if v, ok := os.LookupEnv(key); ok && v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			return n
+		}
 	}
 	return def
 }

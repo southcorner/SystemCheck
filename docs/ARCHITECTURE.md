@@ -128,6 +128,12 @@ data minimization + retention purge, signed agent binaries + secure auto-update.
   Windows-only with cross-platform no-op stubs. Windows Security event-log ingestion
   (logon/failed-logon/privilege-escalation) is deferred to a follow-up as it needs
   the wevtapi bindings rather than the ETW path used here.
-- **Phase 4 — Hardening & ops**: encryption at rest, full RBAC + audit + dual-approval
-  viewing, retention/purge, signed binaries + auto-update, backups, MSI installer,
-  security review.
+- **Phase 4 — Hardening & ops** *(implemented; full auto-update = Phase 5)*: automatic
+  retention purge, admin user management + full RBAC, dual-approval screenshot viewing,
+  Windows Security event-log collector (`seclog`, closing the Phase 3 deferral) +
+  failed-logon alert, `GET /v1/agent-version` release advertisement, backup script,
+  Windows service installer, and the operations + security-review docs
+  (`docs/OPERATIONS.md`, `docs/SECURITY_REVIEW.md`).
+- **Phase 5 — Deferred**: binary auto-update (download-verify-swap-restart, using the
+  ed25519 signing already advertised), an automated WiX MSI build in CI, HA/replication,
+  and SIEM/webhook export.

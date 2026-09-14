@@ -35,6 +35,7 @@ type Policy struct {
 	PrintJobs    Toggle           `json:"printjobs"`
 	Installs     Toggle           `json:"installs"`
 	Posture      PosturePolicy    `json:"posture"`
+	Seclog       Toggle           `json:"seclog"`
 	Exclusions   Exclusions       `json:"exclusions"`
 	HeartbeatSec int              `json:"heartbeat_sec"`
 }

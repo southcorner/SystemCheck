@@ -43,6 +43,10 @@ func (a *App) handleListMachines(w http.ResponseWriter, r *http.Request) {
 
 func (a *App) handleMachineScreenshots(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
+	if !a.approvedToView(r, id) {
+		writeErr(w, http.StatusForbidden, "approval_required")
+		return
+	}
 	from, to := timeRange(r)
 	shots, err := a.Store.ListScreenshots(r.Context(), id, from, to, limitParam(r, 200))
 	if err != nil {
@@ -88,6 +92,10 @@ func (a *App) handleScreenshotImage(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, http.StatusNotFound, "not found")
 		return
 	}
+	if !a.approvedToView(r, machineID) {
+		writeErr(w, http.StatusForbidden, "approval_required")
+		return
+	}
 	data, err := a.Blob.Get(objectKey)
 	if err != nil {
 		writeErr(w, http.StatusNotFound, "blob missing")
@@ -102,6 +110,17 @@ func (a *App) handleScreenshotImage(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", ct)
 	w.Header().Set("Cache-Control", "private, no-store")
 	_, _ = w.Write(data)
+}
+
+// approvedToView reports whether the current user may view screenshots for the
+// machine. When dual approval is disabled, everyone with a valid MFA session may;
+// when enabled, an active second-admin approval is required.
+func (a *App) approvedToView(r *http.Request, machineID string) bool {
+	if !a.Cfg.RequireDualApproval {
+		return true
+	}
+	ok, err := a.Store.HasActiveApproval(r.Context(), currentUser(r).Email, machineID)
+	return err == nil && ok
 }
 
 func (a *App) handleAudit(w http.ResponseWriter, r *http.Request) {

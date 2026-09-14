@@ -82,3 +82,16 @@ func TestDLPAndUSB(t *testing.T) {
 		t.Fatalf("new_install expected 1, got %d", len(m))
 	}
 }
+
+func TestFailedLogon(t *testing.T) {
+	rules := []store.AlertRule{{ID: "f1", Kind: "failed_logon", Enabled: true, Params: map[string]interface{}{}}}
+	m := Evaluate(rules, model.Event{Kind: "seclog", Data: map[string]interface{}{"kind": "failed_logon", "account": "jdoe", "logon_type": "3"}})
+	if len(m) != 1 {
+		t.Fatalf("expected 1 failed_logon match, got %d", len(m))
+	}
+	// A successful logon must not match.
+	m = Evaluate(rules, model.Event{Kind: "seclog", Data: map[string]interface{}{"kind": "logon", "account": "jdoe"}})
+	if len(m) != 0 {
+		t.Fatalf("expected 0 for successful logon, got %d", len(m))
+	}
+}
