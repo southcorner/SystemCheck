@@ -1,0 +1,128 @@
+package api
+
+import (
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"time"
+
+	"github.com/southcorner/systemcheck/server/internal/auth"
+	"github.com/southcorner/systemcheck/server/internal/model"
+)
+
+const clientCertTTL = 365 * 24 * time.Hour
+
+// handleEnroll exchanges a one-time token for a signed client certificate.
+func (a *App) handleEnroll(w http.ResponseWriter, r *http.Request) {
+	var req model.EnrollRequest
+	if err := json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, "bad request")
+		return
+	}
+	if req.Token == "" || req.CSRPEM == "" || req.Hostname == "" {
+		writeErr(w, http.StatusBadRequest, "token, hostname and csr_pem required")
+		return
+	}
+	tok, err := a.Store.ConsumeEnrollmentToken(r.Context(), auth.HashToken(req.Token))
+	if err != nil {
+		writeErr(w, http.StatusUnauthorized, "invalid or expired enrollment token")
+		return
+	}
+	os := req.OS
+	if os == "" {
+		os = "windows"
+	}
+	// Sign first with a placeholder CN, then use the machine id as CN by
+	// creating the machine row first.
+	machineID := ""
+	// Create the machine row (fingerprint filled after signing).
+	// We sign, get fingerprint, then insert. Insert needs a CN; use hostname.
+	certPEM, fp, err := a.CA.SignCSR(req.CSRPEM, req.Hostname, clientCertTTL)
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, "csr: "+err.Error())
+		return
+	}
+	machineID, err = a.Store.CreateMachine(r.Context(),
+		req.Hostname, os, req.OSVersion, req.AgentVersion, tok.Group, tok.AssignedUser, fp)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "enroll store error")
+		return
+	}
+	_ = a.Store.Audit(r.Context(), "agent:"+req.Hostname, "agent_enrolled", machineID,
+		map[string]interface{}{"group": tok.Group, "user": tok.AssignedUser})
+	writeJSON(w, http.StatusOK, model.EnrollResponse{
+		MachineID: machineID,
+		CertPEM:   certPEM,
+		CAPEM:     string(a.CA.CAPEM()),
+	})
+}
+
+// handlePolicy returns the effective policy for the calling agent.
+func (a *App) handlePolicy(w http.ResponseWriter, r *http.Request) {
+	m := currentMachine(r)
+	pol, err := a.Store.EffectivePolicy(r.Context(), m)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "policy error")
+		return
+	}
+	writeJSON(w, http.StatusOK, pol)
+}
+
+// handleIngest accepts a batch of events.
+func (a *App) handleIngest(w http.ResponseWriter, r *http.Request) {
+	m := currentMachine(r)
+	var batch model.IngestBatch
+	if err := json.NewDecoder(io.LimitReader(r.Body, 8<<20)).Decode(&batch); err != nil {
+		writeErr(w, http.StatusBadRequest, "bad batch")
+		return
+	}
+	n, err := a.Store.InsertEvents(r.Context(), m.ID, batch.Events)
+	if err != nil {
+		a.Log.Printf("ingest error machine=%s: %v", m.ID, err)
+		writeErr(w, http.StatusInternalServerError, "ingest error")
+		return
+	}
+	writeJSON(w, http.StatusOK, model.IngestResponse{Accepted: n, Rejected: len(batch.Events) - n})
+}
+
+// handleScreenshotUpload stores an encrypted screenshot blob.
+func (a *App) handleScreenshotUpload(w http.ResponseWriter, r *http.Request) {
+	m := currentMachine(r)
+	if err := r.ParseMultipartForm(16 << 20); err != nil {
+		writeErr(w, http.StatusBadRequest, "bad upload")
+		return
+	}
+	key := r.FormValue("object_key")
+	if key == "" {
+		writeErr(w, http.StatusBadRequest, "object_key required")
+		return
+	}
+	file, _, err := r.FormFile("file")
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, "file required")
+		return
+	}
+	defer file.Close()
+	data, err := io.ReadAll(io.LimitReader(file, 16<<20))
+	if err != nil {
+		writeErr(w, http.StatusBadRequest, "read error")
+		return
+	}
+	// Namespace blobs by machine to keep keys unique.
+	fullKey := fmt.Sprintf("%s/%s", m.ID, key)
+	if err := a.Blob.Put(fullKey, data); err != nil {
+		writeErr(w, http.StatusInternalServerError, "store error")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"object_key": fullKey})
+}
+
+// handleHeartbeat updates machine liveness.
+func (a *App) handleHeartbeat(w http.ResponseWriter, r *http.Request) {
+	m := currentMachine(r)
+	var hb model.Heartbeat
+	_ = json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&hb)
+	_ = a.Store.TouchMachine(r.Context(), m.ID, hb.AgentVersion)
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}

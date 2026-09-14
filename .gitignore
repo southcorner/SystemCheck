@@ -1,0 +1,27 @@
+# Go
+/server/server
+/agent/agent
+/agent/agent.exe
+*.test
+*.out
+
+# Node / dashboard
+node_modules/
+dashboard/dist/
+dashboard/.vite/
+
+# Secrets & local env
+deploy/server.env
+*.pem
+!deploy/**/*.example
+certs/
+
+# Local data
+*.db
+*.bolt
+data/
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/

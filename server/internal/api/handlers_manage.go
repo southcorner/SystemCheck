@@ -1,0 +1,95 @@
+package api
+
+import (
+	"encoding/json"
+	"net/http"
+	"time"
+
+	"github.com/southcorner/systemcheck/server/internal/auth"
+	"github.com/southcorner/systemcheck/server/internal/model"
+)
+
+type enrollTokenReq struct {
+	Group        string `json:"group"`
+	AssignedUser string `json:"assigned_user"`
+	TTLMinutes   int    `json:"ttl_minutes"`
+}
+
+type enrollTokenResp struct {
+	Token     string    `json:"token"`
+	ExpiresAt time.Time `json:"expires_at"`
+}
+
+// handleCreateEnrollToken mints a one-time enrollment token (shown once).
+func (a *App) handleCreateEnrollToken(w http.ResponseWriter, r *http.Request) {
+	var req enrollTokenReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, "bad request")
+		return
+	}
+	ttl := time.Duration(req.TTLMinutes) * time.Minute
+	if ttl <= 0 {
+		ttl = 60 * time.Minute
+	}
+	tok, err := auth.NewToken()
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "token error")
+		return
+	}
+	expires := time.Now().Add(ttl)
+	if err := a.Store.CreateEnrollmentToken(r.Context(), auth.HashToken(tok), req.Group, req.AssignedUser, expires); err != nil {
+		writeErr(w, http.StatusInternalServerError, "store error")
+		return
+	}
+	_ = a.Store.Audit(r.Context(), currentUser(r).Email, "create_enroll_token", req.AssignedUser,
+		map[string]interface{}{"group": req.Group})
+	writeJSON(w, http.StatusOK, enrollTokenResp{Token: tok, ExpiresAt: expires})
+}
+
+type consentReq struct {
+	SubjectUser   string `json:"subject_user"`
+	MachineID     string `json:"machine_id"`
+	Method        string `json:"method"`
+	PolicyVersion int    `json:"policy_version"`
+}
+
+// handleRecordConsent records a consent acknowledgement that gates monitoring.
+func (a *App) handleRecordConsent(w http.ResponseWriter, r *http.Request) {
+	var req consentReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.SubjectUser == "" {
+		writeErr(w, http.StatusBadRequest, "subject_user required")
+		return
+	}
+	if req.Method == "" {
+		req.Method = "admin-recorded"
+	}
+	if err := a.Store.RecordConsent(r.Context(), req.SubjectUser, req.MachineID, req.Method, req.PolicyVersion); err != nil {
+		writeErr(w, http.StatusInternalServerError, "store error")
+		return
+	}
+	_ = a.Store.Audit(r.Context(), currentUser(r).Email, "record_consent", req.SubjectUser,
+		map[string]interface{}{"method": req.Method})
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
+type upsertPolicyReq struct {
+	Name   string       `json:"name"`
+	Policy model.Policy `json:"policy"`
+}
+
+// handleUpsertPolicy stores a new policy version.
+func (a *App) handleUpsertPolicy(w http.ResponseWriter, r *http.Request) {
+	var req upsertPolicyReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Name == "" {
+		writeErr(w, http.StatusBadRequest, "name and policy required")
+		return
+	}
+	id, version, err := a.Store.UpsertPolicy(r.Context(), req.Name, req.Policy)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "store error")
+		return
+	}
+	_ = a.Store.Audit(r.Context(), currentUser(r).Email, "policy_update", req.Name,
+		map[string]interface{}{"version": version})
+	writeJSON(w, http.StatusOK, map[string]interface{}{"id": id, "version": version})
+}
