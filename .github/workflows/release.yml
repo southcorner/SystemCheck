@@ -1,0 +1,45 @@
+name: Release
+
+# Builds and signs the Windows agent and MSI on a version tag.
+# Requires repo secrets:
+#   SC_RELEASE_PRIVKEY  - base64 ed25519 private key (from `scsign keygen`)
+#   (code-signing certificate secrets for signtool, if signing the MSI)
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  agent:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+      - name: Build signed-update-ready agent
+        working-directory: agent
+        shell: bash
+        env:
+          PINNED_PUBKEY: ${{ vars.SC_RELEASE_PUBKEY }}
+        run: |
+          GOOS=windows GOARCH=amd64 go build \
+            -ldflags "-X github.com/southcorner/systemcheck/agent/internal/updater.PinnedPublicKey=$PINNED_PUBKEY" \
+            -o agent.exe ./cmd/agent
+      - name: Sign the release with the offline ed25519 key
+        working-directory: server
+        shell: bash
+        env:
+          SC_RELEASE_PRIVKEY: ${{ secrets.SC_RELEASE_PRIVKEY }}
+        run: |
+          go run ./cmd/scsign sign -key "$SC_RELEASE_PRIVKEY" ../agent/agent.exe > ../agent/agent.exe.sig
+      # Build the MSI with WiX (requires WiX toolset on the runner) and,
+      # optionally, code-sign it with signtool. See deploy/installer/systemcheck-agent.wxs.
+      # - name: Build MSI
+      #   run: dotnet tool install --global wix && wix build deploy/installer/systemcheck-agent.wxs -o SystemCheckAgent.msi
+      - name: Publish artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: systemcheck-agent
+          path: |
+            agent/agent.exe
+            agent/agent.exe.sig

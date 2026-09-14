@@ -14,22 +14,28 @@ import (
 
 	"github.com/southcorner/systemcheck/server/internal/blob"
 	"github.com/southcorner/systemcheck/server/internal/config"
+	"github.com/southcorner/systemcheck/server/internal/notify"
 	"github.com/southcorner/systemcheck/server/internal/pki"
 	"github.com/southcorner/systemcheck/server/internal/store"
 )
 
 // App holds server dependencies shared across handlers.
 type App struct {
-	Cfg   *config.Config
-	Store *store.Store
-	Blob  blob.Store
-	CA    *pki.CA
-	Log   *log.Logger
+	Cfg      *config.Config
+	Store    *store.Store
+	Blob     blob.Store
+	CA       *pki.CA
+	Notifier *notify.Webhook
+	Log      *log.Logger
 }
 
 // New constructs an App.
 func New(cfg *config.Config, st *store.Store, bl blob.Store, ca *pki.CA) *App {
-	return &App{Cfg: cfg, Store: st, Blob: bl, CA: ca, Log: log.New(os.Stdout, "api ", log.LstdFlags)}
+	return &App{
+		Cfg: cfg, Store: st, Blob: bl, CA: ca,
+		Notifier: notify.NewWebhook(cfg.AlertWebhook),
+		Log:      log.New(os.Stdout, "api ", log.LstdFlags),
+	}
 }
 
 // Router builds the HTTP handler.

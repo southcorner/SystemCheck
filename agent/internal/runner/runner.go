@@ -5,7 +5,9 @@ package runner
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
+	"net/http"
 	"os"
 	"time"
 
@@ -24,6 +26,7 @@ import (
 	"github.com/southcorner/systemcheck/agent/internal/enroll"
 	"github.com/southcorner/systemcheck/agent/internal/spool"
 	"github.com/southcorner/systemcheck/agent/internal/transport"
+	"github.com/southcorner/systemcheck/agent/internal/updater"
 	"github.com/southcorner/systemcheck/agent/internal/wire"
 )
 
@@ -92,11 +95,22 @@ func Run(ctx context.Context, cfg *config.Config) error {
 	defer policyTicker.Stop()
 	defer hbTicker.Stop()
 
+	// Signed self-update check (only when a public key was pinned at build time).
+	var updateC <-chan time.Time
+	if updater.Enabled() {
+		ut := time.NewTicker(6 * time.Hour)
+		defer ut.Stop()
+		updateC = ut.C
+		go checkForUpdate(ctx, client)
+	}
+
 	for {
 		select {
 		case <-ctx.Done():
 			cancelCollectors()
 			return nil
+		case <-updateC:
+			checkForUpdate(ctx, client)
 		case <-drainTicker.C:
 			drain(ctx, client, sp)
 		case <-hbTicker.C:
@@ -121,6 +135,44 @@ func Run(ctx context.Context, cfg *config.Config) error {
 			}
 		}
 	}
+}
+
+// checkForUpdate asks the server for the latest release and installs it if newer
+// and correctly signed. Installing restarts the service, which relaunches the
+// agent from the new binary.
+func checkForUpdate(ctx context.Context, client *transport.Client) {
+	info, err := client.GetAgentVersion(ctx)
+	if err != nil {
+		return
+	}
+	updated, err := updater.CheckAndUpdate(ctx, Version,
+		updater.VersionInfo{Version: info.Version, URL: info.URL, Signature: info.Signature},
+		downloadURL, updater.Install)
+	if err != nil {
+		log.Printf("update check: %v", err)
+		return
+	}
+	if updated {
+		log.Printf("update: installed %s; service will restart", info.Version)
+	}
+}
+
+// downloadURL fetches a release binary over plain HTTPS (the URL may be an
+// external CDN, not the mTLS server).
+func downloadURL(ctx context.Context, url string) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("download: status %d", res.StatusCode)
+	}
+	return io.ReadAll(io.LimitReader(res.Body, 200<<20))
 }
 
 func startCollectors(ctx context.Context, pol wire.Policy, emit collectors.Emit, emitBlob collectors.EmitBlob) {

@@ -10,6 +10,7 @@ import (
 	"github.com/southcorner/systemcheck/server/internal/alert"
 	"github.com/southcorner/systemcheck/server/internal/auth"
 	"github.com/southcorner/systemcheck/server/internal/model"
+	"github.com/southcorner/systemcheck/server/internal/notify"
 )
 
 const clientCertTTL = 365 * 24 * time.Hour
@@ -85,7 +86,12 @@ func (a *App) handleIngest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Evaluate alert rules against the batch (best-effort; never fails ingest).
-	if err := alert.Process(r.Context(), a.Store, m.ID, batch.Events); err != nil {
+	notifyFn := func(mt alert.Match) {
+		_ = a.Notifier.Send(r.Context(), notify.AlertPayload{
+			MachineID: m.ID, Severity: mt.Severity, Message: mt.Message, Data: mt.Data,
+		})
+	}
+	if err := alert.Process(r.Context(), a.Store, m.ID, batch.Events, notifyFn); err != nil {
 		a.Log.Printf("alert eval error machine=%s: %v", m.ID, err)
 	}
 	writeJSON(w, http.StatusOK, model.IngestResponse{Accepted: n, Rejected: len(batch.Events) - n})

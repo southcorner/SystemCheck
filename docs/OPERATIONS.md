@@ -64,16 +64,51 @@ retire the old CA. Client certs are issued for 1 year; re-enroll before expiry.
 one-time enrollment token; `uninstall.ps1` removes it. For production, ship a
 **code-signed MSI** built with WiX in CI rather than the raw script.
 
-## Release signing & agent updates
+## Release signing & agent auto-update
 
-Sign each agent release with an ed25519 key held offline. Publish the version,
-download URL, and base64 signature via `SC_AGENT_LATEST_VERSION` /
-`SC_AGENT_DOWNLOAD_URL` / `SC_AGENT_SIGNATURE_B64`; the server advertises them at
-`GET /v1/agent-version` (mTLS). A future agent self-updater will download the named
-release, verify the signature against a pinned public key baked into the agent, and
-only then swap the binary and restart the service. The binary swap + service
-restart is intentionally deferred (Phase 5): it is OS-specific and unsafe to ship
-without a real Windows test host.
+Signed self-update is implemented end to end.
+
+1. Generate an ed25519 keypair once, offline: `go run ./server/cmd/scsign keygen`.
+   Keep the private key offline; the public key is pinned into the agent at build
+   time via `-ldflags "-X .../agent/internal/updater.PinnedPublicKey=<pubB64>"`
+   (the release workflow does this from the `SC_RELEASE_PUBKEY` repo variable).
+   With no key pinned, self-update is disabled entirely.
+2. On each release, sign the binary:
+   `go run ./server/cmd/scsign sign -key <privB64> agent.exe`.
+3. Publish the version, download URL, and signature via `SC_AGENT_LATEST_VERSION` /
+   `SC_AGENT_DOWNLOAD_URL` / `SC_AGENT_SIGNATURE_B64`. The server advertises them at
+   `GET /v1/agent-version` (mTLS).
+4. Agents check every 6 hours: if the advertised version is newer, the agent
+   downloads it, verifies the signature against its pinned public key, then (on
+   Windows) moves the running binary aside, writes the new one, and restarts the
+   service. A verification failure aborts the update and rolls back.
+
+`.github/workflows/release.yml` builds the pinned agent, signs it with `scsign`,
+and (optionally) builds a code-signed MSI from
+`deploy/installer/systemcheck-agent.wxs`.
+
+## SIEM / webhook export
+
+Set `SC_ALERT_WEBHOOK` to a URL to forward every alert as JSON
+(`{source, machine_id, severity, message, data, timestamp}`) as it fires. Point it
+at a SIEM's HTTP collector or an incident webhook. Delivery is best-effort and
+never blocks ingestion.
+
+## High availability
+
+The server is stateless, so run two or more instances behind a load balancer that
+supports client-certificate passthrough (agents use mTLS). Shared state lives in
+Postgres and MinIO:
+
+- **Postgres**: use streaming replication (a primary + one or more hot standbys)
+  or a managed HA Postgres/TimescaleDB; point all server instances at the primary
+  (or a connection pooler with failover).
+- **MinIO**: run a distributed MinIO cluster (erasure-coded) or a managed
+  S3-compatible store.
+- **CA/secrets**: the enrollment CA key and `server.env` must be available to every
+  instance via a secrets manager, not baked into images.
+- The retention purge loop is idempotent, so multiple instances running it
+  concurrently is safe (deletes simply no-op on already-purged rows).
 
 ## Monitoring the monitor
 

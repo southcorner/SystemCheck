@@ -44,6 +44,9 @@ type Config struct {
 	AgentLatestVersion string
 	AgentDownloadURL   string
 	AgentSignatureB64  string // ed25519 signature of the release, base64
+
+	// AlertWebhook, if set, receives alert JSON (SIEM/webhook export).
+	AlertWebhook string
 }
 
 // Load reads configuration from environment variables, applying defaults.
@@ -75,6 +78,8 @@ func Load() (*Config, error) {
 		AgentLatestVersion: env("SC_AGENT_LATEST_VERSION", ""),
 		AgentDownloadURL:   env("SC_AGENT_DOWNLOAD_URL", ""),
 		AgentSignatureB64:  env("SC_AGENT_SIGNATURE_B64", ""),
+
+		AlertWebhook: env("SC_ALERT_WEBHOOK", ""),
 	}
 
 	host := env("DB_HOST", "127.0.0.1")

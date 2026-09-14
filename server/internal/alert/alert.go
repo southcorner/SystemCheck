@@ -128,8 +128,10 @@ func Evaluate(rules []store.AlertRule, e model.Event) []Match {
 	return matches
 }
 
-// Process loads enabled rules once and records alerts for a batch of events.
-func Process(ctx context.Context, st *store.Store, machineID string, events []model.Event) error {
+// Process loads enabled rules once and records alerts for a batch of events. For
+// each recorded alert it invokes notify (if non-nil), e.g. to forward to a
+// SIEM/webhook. Notification failures do not fail Process.
+func Process(ctx context.Context, st *store.Store, machineID string, events []model.Event, notify func(Match)) error {
 	rules, err := st.ListAlertRules(ctx, false)
 	if err != nil || len(rules) == 0 {
 		return err
@@ -138,6 +140,9 @@ func Process(ctx context.Context, st *store.Store, machineID string, events []mo
 		for _, m := range Evaluate(rules, e) {
 			if err := st.CreateAlert(ctx, m.RuleID, machineID, m.Severity, m.Message, m.Data); err != nil {
 				return err
+			}
+			if notify != nil {
+				notify(m)
 			}
 		}
 	}

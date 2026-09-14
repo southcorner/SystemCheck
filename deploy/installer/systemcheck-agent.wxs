@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Minimal WiX v4 manifest for the SystemCheck agent MSI. Installs agent.exe and
+  registers the Windows service. Build in CI:
+    wix build deploy/installer/systemcheck-agent.wxs -o SystemCheckAgent.msi
+  Then code-sign the MSI with signtool. Enrollment config (server URL + one-time
+  token) is supplied post-install via agent.json or MSI properties, per policy.
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package Name="SystemCheck Agent" Manufacturer="SystemCheck"
+           Version="0.2.0.0" UpgradeCode="1f8b4c2e-9a3d-4c5e-8b6a-000000000001">
+    <MajorUpgrade DowngradeErrorMessage="A newer version is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLDIR" Name="SystemCheck">
+        <Component Id="AgentExe" Guid="1f8b4c2e-9a3d-4c5e-8b6a-000000000002">
+          <File Id="agent.exe" Source="agent/agent.exe" KeyPath="yes" />
+          <ServiceInstall Id="AgentSvc" Name="SystemCheckAgent"
+                          DisplayName="SystemCheck Agent" Start="auto" Type="ownProcess"
+                          ErrorControl="normal"
+                          Description="Transparent endpoint monitoring agent (company policy applies)." />
+          <ServiceControl Id="AgentSvcCtl" Name="SystemCheckAgent"
+                          Start="install" Stop="both" Remove="uninstall" Wait="yes" />
+        </Component>
+      </Directory>
+    </StandardDirectory>
+
+    <Feature Id="Main">
+      <ComponentRef Id="AgentExe" />
+    </Feature>
+  </Package>
+</Wix>

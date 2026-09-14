@@ -134,6 +134,10 @@ data minimization + retention purge, signed agent binaries + secure auto-update.
   failed-logon alert, `GET /v1/agent-version` release advertisement, backup script,
   Windows service installer, and the operations + security-review docs
   (`docs/OPERATIONS.md`, `docs/SECURITY_REVIEW.md`).
-- **Phase 5 — Deferred**: binary auto-update (download-verify-swap-restart, using the
-  ed25519 signing already advertised), an automated WiX MSI build in CI, HA/replication,
-  and SIEM/webhook export.
+- **Phase 5 — Delivered**: signed binary auto-update (agent checks `/v1/agent-version`,
+  verifies an ed25519 signature against a pinned key, swaps the binary and restarts the
+  service on Windows), release-signing CLI (`server/cmd/scsign`), SIEM/webhook alert
+  export (`SC_ALERT_WEBHOOK`), CI + release workflows (`.github/workflows`), a WiX MSI
+  manifest, and HA guidance (`docs/OPERATIONS.md`). The self-update binary swap and the
+  MSI build require a real Windows host / WiX to exercise (validated by cross-compile
+  and documented).

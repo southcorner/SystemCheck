@@ -73,6 +73,34 @@ func (c *Client) Enroll(ctx context.Context, req wire.EnrollRequest) (*wire.Enro
 	return &resp, nil
 }
 
+// AgentVersionInfo is the response from GET /v1/agent-version.
+type AgentVersionInfo struct {
+	Version   string `json:"version"`
+	URL       string `json:"url"`
+	Signature string `json:"signature"`
+}
+
+// GetAgentVersion fetches the advertised latest agent release.
+func (c *Client) GetAgentVersion(ctx context.Context) (*AgentVersionInfo, error) {
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/v1/agent-version", nil)
+	if err != nil {
+		return nil, err
+	}
+	res, err := c.http.Do(httpReq)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("agent-version: status %d", res.StatusCode)
+	}
+	var info AgentVersionInfo
+	if err := json.NewDecoder(res.Body).Decode(&info); err != nil {
+		return nil, err
+	}
+	return &info, nil
+}
+
 // GetPolicy fetches the current policy.
 func (c *Client) GetPolicy(ctx context.Context) (*wire.Policy, error) {
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/v1/policy", nil)
