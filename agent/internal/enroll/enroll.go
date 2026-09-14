@@ -42,7 +42,14 @@ func Run(ctx context.Context, cfg *config.Config, agentVersion string) (string, 
 	}
 	csrPEM := string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csrDER}))
 
-	client := transport.NewEnrollClient(cfg.ServerURL, nil)
+	// Trust the enrollment CA on first contact if the installer pre-provisioned
+	// it (ca.crt in the data dir). Otherwise fall back to the system roots, for
+	// deployments whose server uses a publicly trusted TLS certificate.
+	var bootstrapCA []byte
+	if b, err := os.ReadFile(cfg.CAPath()); err == nil {
+		bootstrapCA = b
+	}
+	client := transport.NewEnrollClient(cfg.ServerURL, bootstrapCA)
 	resp, err := client.Enroll(ctx, wire.EnrollRequest{
 		Token:        cfg.EnrollToken,
 		Hostname:     hostname,
