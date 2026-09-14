@@ -171,6 +171,59 @@ log.
 cd deploy && docker compose --env-file server.env down     # add -v to drop data
 ```
 
+## Testing across the network (server + agents on other machines)
+
+Same as the quickstart, with four differences so agents on other LAN machines can
+reach and trust the server.
+
+1. **Put the server's LAN address in its certificate.** Before the first server
+   run, set `SC_TLS_SANS` to the server's IP (and hostname) so the auto-generated
+   dev cert is valid there. If you already ran the server once, delete the old
+   certs first so they regenerate:
+
+   ```bash
+   rm -f server/certs/*.crt server/certs/*.key      # only if they already exist
+   # in server.env (or the server's environment):
+   SC_TLS_SANS=192.168.1.50,systemcheck.lan
+   ```
+
+   The server binds all interfaces on `:8443` already; open that port in the
+   server's firewall.
+
+2. **Build the Windows agent** (on the server, or any machine with Go):
+
+   ```bash
+   cd agent && GOOS=windows GOARCH=amd64 go build -o agent.exe ./cmd/agent
+   ```
+
+3. **Mint an enrollment token and record consent** on the server exactly as in
+   quickstart steps 4–5 (use `127.0.0.1` there, since you're on the server).
+
+4. **On each Windows machine**, copy over three files — `agent.exe`,
+   `server/certs/ca.crt` (so the agent trusts the server), and an `agent.json` —
+   then run the agent **as Administrator** (ETW, `wevtutil`, and the registry scan
+   need it):
+
+   ```powershell
+   # Place ca.crt and agent.json in C:\ProgramData\SystemCheck\
+   #   agent.json:
+   #   { "server_url": "https://192.168.1.50:8443",
+   #     "data_dir": "C:\\ProgramData\\SystemCheck",
+   #     "enroll_token": "<token from step 3>" }
+   New-Item -ItemType Directory -Force C:\ProgramData\SystemCheck | Out-Null
+   Copy-Item ca.crt C:\ProgramData\SystemCheck\ca.crt
+   .\agent.exe -console -config C:\ProgramData\SystemCheck\agent.json
+   ```
+
+   Console mode is easiest for a first test. To run it as a background service
+   instead, use `deploy/installer/install.ps1 -ServerUrl https://192.168.1.50:8443
+   -EnrollToken <token>` (also as Administrator), after placing `ca.crt` in the
+   data dir.
+
+The Windows machine now appears under **Machines**, and its screenshots, apps,
+and (once enabled in policy) network and security signals flow to the server.
+Enable DNS/USB/etc. by assigning a policy; the default captures screenshots + apps.
+
 ## Production notes
 
 Use a real (publicly trusted) TLS certificate for the server, ship the enrollment

@@ -11,13 +11,18 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
 // EnsureDevCerts generates a self-signed CA and a server certificate for local
 // development if the files do not already exist. It is a convenience for `go run`
 // and MUST NOT be used to provision production certificates.
-func EnsureDevCerts(caCert, caKey, srvCert, srvKey string) error {
+//
+// extraSANs adds Subject Alternative Names beyond localhost so agents on other
+// machines can reach the server by its LAN IP or hostname (each entry is treated
+// as an IP if it parses as one, otherwise a DNS name).
+func EnsureDevCerts(caCert, caKey, srvCert, srvKey string, extraSANs ...string) error {
 	if fileExists(caCert) && fileExists(caKey) && fileExists(srvCert) && fileExists(srvKey) {
 		return nil
 	}
@@ -61,15 +66,28 @@ func EnsureDevCerts(caCert, caKey, srvCert, srvKey string) error {
 	if err != nil {
 		return err
 	}
+	dnsNames := []string{"localhost"}
+	ips := []net.IP{net.IPv4(127, 0, 0, 1), net.IPv6loopback}
+	for _, s := range extraSANs {
+		s = strings.TrimSpace(s)
+		if s == "" {
+			continue
+		}
+		if ip := net.ParseIP(s); ip != nil {
+			ips = append(ips, ip)
+		} else {
+			dnsNames = append(dnsNames, s)
+		}
+	}
 	srvTmpl := &x509.Certificate{
 		SerialNumber: big.NewInt(2),
-		Subject:      pkix.Name{CommonName: "localhost"},
+		Subject:      pkix.Name{CommonName: "systemcheck"},
 		NotBefore:    time.Now().Add(-time.Hour),
 		NotAfter:     time.Now().Add(2 * 365 * 24 * time.Hour),
 		KeyUsage:     x509.KeyUsageDigitalSignature,
 		ExtKeyUsage:  []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
-		DNSNames:     []string{"localhost"},
-		IPAddresses:  []net.IP{net.IPv4(127, 0, 0, 1), net.IPv6loopback},
+		DNSNames:     dnsNames,
+		IPAddresses:  ips,
 	}
 	srvDER, err := x509.CreateCertificate(rand.Reader, srvTmpl, caParsed, &srvKeyPriv.PublicKey, caKeyPriv)
 	if err != nil {

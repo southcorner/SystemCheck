@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 )
 
 // Config holds all server configuration.
@@ -47,6 +48,11 @@ type Config struct {
 
 	// AlertWebhook, if set, receives alert JSON (SIEM/webhook export).
 	AlertWebhook string
+
+	// TLSSANs are extra Subject Alternative Names (LAN IPs/hostnames) added to the
+	// auto-generated dev server certificate so agents on other machines can reach
+	// it. Comma-separated in SC_TLS_SANS. Ignored once real certs are provided.
+	TLSSANs []string
 }
 
 // Load reads configuration from environment variables, applying defaults.
@@ -80,6 +86,7 @@ func Load() (*Config, error) {
 		AgentSignatureB64:  env("SC_AGENT_SIGNATURE_B64", ""),
 
 		AlertWebhook: env("SC_ALERT_WEBHOOK", ""),
+		TLSSANs:      splitCSV(env("SC_TLS_SANS", "")),
 	}
 
 	host := env("DB_HOST", "127.0.0.1")
@@ -100,6 +107,20 @@ func env(key, def string) string {
 		return v
 	}
 	return def
+}
+
+func splitCSV(s string) []string {
+	if s == "" {
+		return nil
+	}
+	parts := strings.Split(s, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 func envInt(key string, def int) int {

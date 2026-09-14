@@ -31,7 +31,7 @@ func main() {
 	ctx := context.Background()
 
 	// Dev convenience: generate self-signed CA + server cert if absent.
-	if err := pki.EnsureDevCerts(cfg.CACert, cfg.CAKey, cfg.TLSCert, cfg.TLSKey); err != nil {
+	if err := pki.EnsureDevCerts(cfg.CACert, cfg.CAKey, cfg.TLSCert, cfg.TLSKey, cfg.TLSSANs...); err != nil {
 		log.Fatalf("dev certs: %v", err)
 	}
 
