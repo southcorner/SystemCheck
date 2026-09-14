@@ -31,6 +31,10 @@ type Policy struct {
 	DNS          Toggle           `json:"dns"`
 	Netflow      NetflowPolicy    `json:"netflow"`
 	Fswatch      FswatchPolicy    `json:"fswatch"`
+	USB          Toggle           `json:"usb"`
+	PrintJobs    Toggle           `json:"printjobs"`
+	Installs     Toggle           `json:"installs"`
+	Posture      PosturePolicy    `json:"posture"`
 	Exclusions   Exclusions       `json:"exclusions"`
 	HeartbeatSec int              `json:"heartbeat_sec"`
 }
@@ -68,6 +72,12 @@ type FswatchPolicy struct {
 	Enabled               bool     `json:"enabled"`
 	Folders               []string `json:"folders"`
 	IncludeBrowserHistory bool     `json:"include_browser_history"`
+}
+
+// PosturePolicy configures periodic device-posture snapshots.
+type PosturePolicy struct {
+	Enabled     bool `json:"enabled"`
+	IntervalSec int  `json:"interval_sec"` // default 3600
 }
 
 // Exclusions lists domains/processes never recorded.

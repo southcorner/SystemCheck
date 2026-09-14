@@ -121,8 +121,13 @@ data minimization + retention purge, signed agent binaries + secure auto-update.
   history; domain block-list and large-upload alerts; dashboard domains/transfers/
   downloads tabs and an alerts view. DNS/netflow are Windows-only (ETW) with
   cross-platform no-op stubs; fswatch is cross-platform.
-- **Phase 3 — Security monitoring**: USB, print jobs, device posture, security-log
-  events, idle time, new installs; alerting engine + DLP + anomaly alerts.
+- **Phase 3 — Security monitoring** *(implemented, except security-log events)*: USB
+  removable-media insert/remove, print jobs, device posture (BitLocker/Defender/
+  firewall/patch), new software installs; DLP keyword rules, USB-insert and
+  new-install alerts; dashboard security tab. USB/printjobs/posture/installs are
+  Windows-only with cross-platform no-op stubs. Windows Security event-log ingestion
+  (logon/failed-logon/privilege-escalation) is deferred to a follow-up as it needs
+  the wevtapi bindings rather than the ETW path used here.
 - **Phase 4 — Hardening & ops**: encryption at rest, full RBAC + audit + dual-approval
   viewing, retention/purge, signed binaries + auto-update, backups, MSI installer,
   security review.

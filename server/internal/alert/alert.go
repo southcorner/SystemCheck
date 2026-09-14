@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"path"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -76,6 +77,43 @@ func Evaluate(rules []store.AlertRule, e model.Event) []Match {
 					break
 				}
 			}
+		case "dlp_keyword":
+			if e.Kind != "download" {
+				continue
+			}
+			hay := strings.ToLower(str(e.Data["name"]) + " " + str(e.Data["path"]) + " " + str(e.Data["url"]))
+			for _, pat := range strList(r.Params["patterns"]) {
+				re, err := regexp.Compile("(?i)" + pat)
+				if err != nil {
+					continue
+				}
+				if re.MatchString(hay) {
+					matches = append(matches, Match{
+						RuleID: r.ID, Severity: "warning",
+						Message: fmt.Sprintf("DLP match on file: %s", str(e.Data["name"])),
+						Data:    map[string]interface{}{"name": str(e.Data["name"]), "path": str(e.Data["path"]), "pattern": pat},
+					})
+					break
+				}
+			}
+		case "usb_insert":
+			if e.Kind != "usb" || str(e.Data["action"]) != "insert" {
+				continue
+			}
+			matches = append(matches, Match{
+				RuleID: r.ID, Severity: "warning",
+				Message: fmt.Sprintf("Removable media inserted: %s (%s)", str(e.Data["drive"]), str(e.Data["label"])),
+				Data:    map[string]interface{}{"drive": str(e.Data["drive"]), "label": str(e.Data["label"]), "serial": str(e.Data["serial"])},
+			})
+		case "new_install":
+			if e.Kind != "install" {
+				continue
+			}
+			matches = append(matches, Match{
+				RuleID: r.ID, Severity: "info",
+				Message: fmt.Sprintf("New software installed: %s %s", str(e.Data["name"]), str(e.Data["version"])),
+				Data:    map[string]interface{}{"name": str(e.Data["name"]), "version": str(e.Data["version"])},
+			})
 		}
 	}
 	return matches

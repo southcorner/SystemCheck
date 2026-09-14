@@ -44,6 +44,10 @@ type Policy struct {
 	DNS          TogglePolicy     `json:"dns"`
 	Netflow      NetflowPolicy    `json:"netflow"`
 	Fswatch      FswatchPolicy    `json:"fswatch"`
+	USB          TogglePolicy     `json:"usb"`
+	PrintJobs    TogglePolicy     `json:"printjobs"`
+	Installs     TogglePolicy     `json:"installs"`
+	Posture      PosturePolicy    `json:"posture"`
 	Exclusions   Exclusions       `json:"exclusions"`
 	HeartbeatSec int              `json:"heartbeat_sec"`
 }
@@ -90,6 +94,12 @@ type FswatchPolicy struct {
 	Enabled               bool     `json:"enabled"`
 	Folders               []string `json:"folders"`
 	IncludeBrowserHistory bool     `json:"include_browser_history"`
+}
+
+// PosturePolicy configures periodic device-posture snapshots.
+type PosturePolicy struct {
+	Enabled     bool `json:"enabled"`
+	IntervalSec int  `json:"interval_sec"`
 }
 
 // Exclusions lists domains/processes never recorded (privacy).
@@ -140,6 +150,10 @@ func DefaultPolicy() Policy {
 		DNS:          TogglePolicy{Enabled: false},
 		Netflow:      NetflowPolicy{Enabled: false, RollupSec: 60},
 		Fswatch:      FswatchPolicy{Enabled: false, Folders: []string{`%USERPROFILE%\Downloads`}},
+		USB:          TogglePolicy{Enabled: false},
+		PrintJobs:    TogglePolicy{Enabled: false},
+		Installs:     TogglePolicy{Enabled: false},
+		Posture:      PosturePolicy{Enabled: false, IntervalSec: 3600},
 		HeartbeatSec: 60,
 	}
 }

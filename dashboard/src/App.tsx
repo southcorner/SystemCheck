@@ -7,6 +7,7 @@ import {
   DomainRow,
   TransferRow,
   DownloadRow,
+  EventRow,
   Alert,
   formatBytes,
 } from "./api";
@@ -185,7 +186,7 @@ function Empty() {
   );
 }
 
-const TABS = ["apps", "screenshots", "domains", "transfers", "downloads"] as const;
+const TABS = ["apps", "screenshots", "domains", "transfers", "downloads", "security"] as const;
 type Tab = (typeof TABS)[number];
 
 function MachineView({ machine }: { machine: Machine }) {
@@ -205,6 +206,7 @@ function MachineView({ machine }: { machine: Machine }) {
       {tab === "domains" && <DomainsTab id={machine.id} />}
       {tab === "transfers" && <TransfersTab id={machine.id} />}
       {tab === "downloads" && <DownloadsTab id={machine.id} />}
+      {tab === "security" && <SecurityTab id={machine.id} />}
     </div>
   );
 }
@@ -333,6 +335,100 @@ function DownloadsTab({ id }: { id: string }) {
       </tbody>
     </table>
   );
+}
+
+function SecurityTab({ id }: { id: string }) {
+  const [usb, setUsb] = useState<EventRow[]>([]);
+  const [prints, setPrints] = useState<EventRow[]>([]);
+  const [installs, setInstalls] = useState<EventRow[]>([]);
+  const [posture, setPosture] = useState<EventRow[]>([]);
+
+  useEffect(() => {
+    api.events(id, "usb").then(setUsb).catch(() => setUsb([]));
+    api.events(id, "printjob").then(setPrints).catch(() => setPrints([]));
+    api.events(id, "install").then(setInstalls).catch(() => setInstalls([]));
+    api.events(id, "posture").then(setPosture).catch(() => setPosture([]));
+  }, [id]);
+
+  const latest = posture[0]?.data;
+
+  return (
+    <div>
+      <section>
+        <h3>Device posture</h3>
+        {!latest && <p className="muted">No posture snapshot (enable posture in policy).</p>}
+        {latest && (
+          <div className="posture">
+            <Badge ok={!!latest.bitlocker && latest.bitlocker !== "Off"} label={`Encryption: ${latest.bitlocker ?? "?"}`} />
+            <Badge ok={!!latest.defender_enabled} label={`Antivirus: ${latest.defender_enabled ? "on" : "off"}`} />
+            <Badge ok={!!latest.realtime} label={`Realtime: ${latest.realtime ? "on" : "off"}`} />
+            <Badge ok={!!latest.firewall_on} label={`Firewall: ${latest.firewall_on ? "on" : "off"}`} />
+            <Badge ok={true} label={`Last patch: ${latest.last_hotfix ?? "?"}`} />
+          </div>
+        )}
+      </section>
+
+      <section>
+        <h3>Removable media</h3>
+        {usb.length === 0 && <p className="muted">No USB events.</p>}
+        {usb.length > 0 && (
+          <table>
+            <tbody>
+              {usb.map((e, i) => (
+                <tr key={i}>
+                  <td>{String(e.data.action)}</td>
+                  <td className="mono">{String(e.data.drive ?? "")}</td>
+                  <td>{String(e.data.label ?? "")}</td>
+                  <td className="right small">{new Date(e.ts).toLocaleString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </section>
+
+      <section>
+        <h3>Print jobs</h3>
+        {prints.length === 0 && <p className="muted">No print jobs.</p>}
+        {prints.length > 0 && (
+          <table>
+            <tbody>
+              {prints.map((e, i) => (
+                <tr key={i}>
+                  <td className="mono">{String(e.data.document ?? "")}</td>
+                  <td>{String(e.data.printer ?? "")}</td>
+                  <td className="right">{String(e.data.pages ?? "")} pp</td>
+                  <td className="right small">{new Date(e.ts).toLocaleString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </section>
+
+      <section>
+        <h3>New installs</h3>
+        {installs.length === 0 && <p className="muted">No new installs.</p>}
+        {installs.length > 0 && (
+          <table>
+            <tbody>
+              {installs.map((e, i) => (
+                <tr key={i}>
+                  <td className="mono">{String(e.data.name ?? "")}</td>
+                  <td>{String(e.data.version ?? "")}</td>
+                  <td className="right small">{new Date(e.ts).toLocaleString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function Badge({ ok, label }: { ok: boolean; label: string }) {
+  return <span className={"badge " + (ok ? "badge-ok" : "badge-bad")}>{label}</span>;
 }
 
 function AlertsView() {

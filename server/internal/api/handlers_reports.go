@@ -85,7 +85,8 @@ func (a *App) handleCreateAlertRule(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	switch req.Kind {
-	case "domain_blocklist", "large_upload", "app_blocklist":
+	case "domain_blocklist", "large_upload", "app_blocklist",
+		"dlp_keyword", "usb_insert", "new_install":
 	default:
 		writeErr(w, http.StatusBadRequest, "unknown rule kind")
 		return

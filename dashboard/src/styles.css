@@ -41,3 +41,10 @@ th.left, td.left { text-align: left; }
 .sev-info { background: #1f3a5f; color: #9ec5ff; }
 .sev-warning { background: #5a4300; color: #ffd479; }
 .sev-critical { background: #5a1a1a; color: #ff9a9a; }
+
+/* Phase 3 additions */
+.posture { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+.badge { display: inline-block; padding: 4px 10px; border-radius: 8px; font-size: 13px; }
+.badge-ok { background: #14351f; color: #7ee2a8; }
+.badge-bad { background: #3a1414; color: #ff9a9a; }
+section { margin-bottom: 22px; }

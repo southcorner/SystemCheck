@@ -59,3 +59,26 @@ func TestDisabledRuleIgnored(t *testing.T) {
 		t.Fatalf("disabled rule should not match, got %d", len(m))
 	}
 }
+
+func TestDLPAndUSB(t *testing.T) {
+	rules := []store.AlertRule{
+		{ID: "d1", Kind: "dlp_keyword", Enabled: true, Params: map[string]interface{}{"patterns": []interface{}{`payroll|salary|\.sql$`}}},
+		{ID: "u1", Kind: "usb_insert", Enabled: true, Params: map[string]interface{}{}},
+		{ID: "n1", Kind: "new_install", Enabled: true, Params: map[string]interface{}{}},
+	}
+	if m := Evaluate(rules, model.Event{Kind: "download", Data: map[string]interface{}{"name": "2026_payroll.xlsx"}}); len(m) != 1 {
+		t.Fatalf("dlp expected 1, got %d", len(m))
+	}
+	if m := Evaluate(rules, model.Event{Kind: "download", Data: map[string]interface{}{"name": "cat.jpg"}}); len(m) != 0 {
+		t.Fatalf("dlp expected 0, got %d", len(m))
+	}
+	if m := Evaluate(rules, model.Event{Kind: "usb", Data: map[string]interface{}{"action": "insert", "drive": "E:\\"}}); len(m) != 1 {
+		t.Fatalf("usb insert expected 1, got %d", len(m))
+	}
+	if m := Evaluate(rules, model.Event{Kind: "usb", Data: map[string]interface{}{"action": "remove", "drive": "E:\\"}}); len(m) != 0 {
+		t.Fatalf("usb remove expected 0, got %d", len(m))
+	}
+	if m := Evaluate(rules, model.Event{Kind: "install", Data: map[string]interface{}{"name": "uTorrent", "version": "3.5"}}); len(m) != 1 {
+		t.Fatalf("new_install expected 1, got %d", len(m))
+	}
+}

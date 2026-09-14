@@ -13,8 +13,12 @@ import (
 	"github.com/southcorner/systemcheck/agent/internal/collectors/dns"
 	"github.com/southcorner/systemcheck/agent/internal/collectors/foreground"
 	"github.com/southcorner/systemcheck/agent/internal/collectors/fswatch"
+	"github.com/southcorner/systemcheck/agent/internal/collectors/installs"
 	"github.com/southcorner/systemcheck/agent/internal/collectors/netflow"
+	"github.com/southcorner/systemcheck/agent/internal/collectors/posture"
+	"github.com/southcorner/systemcheck/agent/internal/collectors/printjobs"
 	"github.com/southcorner/systemcheck/agent/internal/collectors/screenshot"
+	"github.com/southcorner/systemcheck/agent/internal/collectors/usb"
 	"github.com/southcorner/systemcheck/agent/internal/config"
 	"github.com/southcorner/systemcheck/agent/internal/enroll"
 	"github.com/southcorner/systemcheck/agent/internal/spool"
@@ -134,6 +138,18 @@ func startCollectors(ctx context.Context, pol wire.Policy, emit collectors.Emit,
 	}
 	if pol.Fswatch.Enabled {
 		active = append(active, fswatch.New(pol.Fswatch))
+	}
+	if pol.USB.Enabled {
+		active = append(active, usb.New(pol.USB))
+	}
+	if pol.PrintJobs.Enabled {
+		active = append(active, printjobs.New(pol.PrintJobs))
+	}
+	if pol.Installs.Enabled {
+		active = append(active, installs.New(pol.Installs))
+	}
+	if pol.Posture.Enabled {
+		active = append(active, posture.New(pol.Posture))
 	}
 	for _, c := range active {
 		c := c

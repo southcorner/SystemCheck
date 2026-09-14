@@ -47,6 +47,10 @@ Response `200`:
   "dns":        { "enabled": false },
   "netflow":    { "enabled": false, "rollup_sec": 60 },
   "fswatch":    { "enabled": false, "folders": ["%USERPROFILE%\\Downloads"], "include_browser_history": false },
+  "usb":        { "enabled": false },
+  "printjobs":  { "enabled": false },
+  "installs":   { "enabled": false },
+  "posture":    { "enabled": false, "interval_sec": 3600 },
   "exclusions": { "domains": ["*.bank.example"], "processes": ["1password.exe"] },
   "heartbeat_sec": 60
 }

@@ -34,6 +34,8 @@ export type DownloadRow = {
   url: string;
   source: string;
 };
+export type EventRow = { ts: string; kind: string; data: Record<string, any> };
+
 export type Alert = {
   id: string;
   machine_id: string;
@@ -79,6 +81,8 @@ export const api = {
   domains: (id: string) => req<DomainRow[]>(`/api/machines/${id}/domains`),
   transfers: (id: string) => req<TransferRow[]>(`/api/machines/${id}/transfers`),
   downloads: (id: string) => req<DownloadRow[]>(`/api/machines/${id}/downloads`),
+  events: (id: string, kind: string) =>
+    req<EventRow[]>(`/api/machines/${id}/events?kind=${encodeURIComponent(kind)}`),
   alerts: (unacked = false) =>
     req<Alert[]>(`/api/alerts${unacked ? "?unacked=true" : ""}`),
   ackAlert: (id: string) =>
