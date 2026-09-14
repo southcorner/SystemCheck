@@ -28,3 +28,16 @@ figure { margin: 0; background: #171a21; border-radius: 8px; overflow: hidden; }
 figure img { width: 100%; display: block; }
 figcaption { padding: 6px 8px; }
 .enroll code { display: block; padding: 8px; background: #0f1115; border-radius: 6px; word-break: break-all; }
+
+/* Phase 2 additions */
+nav { display: flex; gap: 4px; margin-left: 16px; }
+.link.sel { color: #fff; font-weight: 600; }
+th { text-align: right; padding: 6px 4px; border-bottom: 1px solid #2a2f3a; color: #8a91a0; font-weight: 600; }
+th.left, td.left { text-align: left; }
+.tabs { display: flex; gap: 6px; margin: 12px 0 16px; flex-wrap: wrap; }
+.tab { background: #171a21; color: #cfd3db; text-transform: capitalize; padding: 6px 12px; font-weight: 500; }
+.tab.sel { background: #3b82f6; color: #fff; }
+.sev { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; text-transform: uppercase; }
+.sev-info { background: #1f3a5f; color: #9ec5ff; }
+.sev-warning { background: #5a4300; color: #ffd479; }
+.sev-critical { background: #5a1a1a; color: #ff9a9a; }

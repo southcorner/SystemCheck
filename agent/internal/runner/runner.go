@@ -10,7 +10,10 @@ import (
 	"time"
 
 	"github.com/southcorner/systemcheck/agent/internal/collectors"
+	"github.com/southcorner/systemcheck/agent/internal/collectors/dns"
 	"github.com/southcorner/systemcheck/agent/internal/collectors/foreground"
+	"github.com/southcorner/systemcheck/agent/internal/collectors/fswatch"
+	"github.com/southcorner/systemcheck/agent/internal/collectors/netflow"
 	"github.com/southcorner/systemcheck/agent/internal/collectors/screenshot"
 	"github.com/southcorner/systemcheck/agent/internal/config"
 	"github.com/southcorner/systemcheck/agent/internal/enroll"
@@ -123,7 +126,15 @@ func startCollectors(ctx context.Context, pol wire.Policy, emit collectors.Emit,
 	if pol.Foreground.Enabled {
 		active = append(active, foreground.New(pol.Foreground))
 	}
-	// dns/netflow/fswatch collectors land in Phase 2.
+	if pol.DNS.Enabled {
+		active = append(active, dns.New(pol.DNS, pol.Exclusions))
+	}
+	if pol.Netflow.Enabled {
+		active = append(active, netflow.New(pol.Netflow))
+	}
+	if pol.Fswatch.Enabled {
+		active = append(active, fswatch.New(pol.Fswatch))
+	}
 	for _, c := range active {
 		c := c
 		go func() {

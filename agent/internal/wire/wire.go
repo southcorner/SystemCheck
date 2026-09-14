@@ -29,7 +29,7 @@ type Policy struct {
 	Screenshot   ScreenshotPolicy `json:"screenshot"`
 	Foreground   ForegroundPolicy `json:"foreground"`
 	DNS          Toggle           `json:"dns"`
-	Netflow      Toggle           `json:"netflow"`
+	Netflow      NetflowPolicy    `json:"netflow"`
 	Fswatch      FswatchPolicy    `json:"fswatch"`
 	Exclusions   Exclusions       `json:"exclusions"`
 	HeartbeatSec int              `json:"heartbeat_sec"`
@@ -57,10 +57,17 @@ type Toggle struct {
 	Enabled bool `json:"enabled"`
 }
 
+// NetflowPolicy configures per-process network byte accounting.
+type NetflowPolicy struct {
+	Enabled   bool `json:"enabled"`
+	RollupSec int  `json:"rollup_sec"` // aggregation window; default 60
+}
+
 // FswatchPolicy configures folder watching.
 type FswatchPolicy struct {
-	Enabled bool     `json:"enabled"`
-	Folders []string `json:"folders"`
+	Enabled               bool     `json:"enabled"`
+	Folders               []string `json:"folders"`
+	IncludeBrowserHistory bool     `json:"include_browser_history"`
 }
 
 // Exclusions lists domains/processes never recorded.

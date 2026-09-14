@@ -45,8 +45,8 @@ Response `200`:
                   "max_width": 1600, "format": "webp", "quality": 60, "blur_regions": [] },
   "foreground": { "enabled": true, "poll_sec": 5, "idle_threshold_sec": 120 },
   "dns":        { "enabled": false },
-  "netflow":    { "enabled": false },
-  "fswatch":    { "enabled": false, "folders": ["%USERPROFILE%\\Downloads"] },
+  "netflow":    { "enabled": false, "rollup_sec": 60 },
+  "fswatch":    { "enabled": false, "folders": ["%USERPROFILE%\\Downloads"], "include_browser_history": false },
   "exclusions": { "domains": ["*.bank.example"], "processes": ["1password.exe"] },
   "heartbeat_sec": 60
 }

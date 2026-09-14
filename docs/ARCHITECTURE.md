@@ -116,8 +116,11 @@ data minimization + retention purge, signed agent binaries + secure auto-update.
   docker-compose, server skeleton, agent skeleton, dashboard skeleton.
 - **Phase 1 — MVP**: screenshots + foreground-app usage end-to-end; admin login +
   MFA; basic policy; offline buffering.
-- **Phase 2 — Network & files**: DNS domains, per-process transfer volume, Downloads
-  watcher + browser download history; allow/block-list alerts.
+- **Phase 2 — Network & files** *(implemented)*: DNS domains (ETW), per-process
+  transfer volume (ETW), Downloads watcher (filenames+sizes) + browser download
+  history; domain block-list and large-upload alerts; dashboard domains/transfers/
+  downloads tabs and an alerts view. DNS/netflow are Windows-only (ETW) with
+  cross-platform no-op stubs; fswatch is cross-platform.
 - **Phase 3 — Security monitoring**: USB, print jobs, device posture, security-log
   events, idle time, new installs; alerting engine + DLP + anomaly alerts.
 - **Phase 4 — Hardening & ops**: encryption at rest, full RBAC + audit + dual-approval

@@ -1,5 +1,15 @@
 import { useEffect, useState } from "react";
-import { api, Machine, ScreenshotMeta, AppUsage } from "./api";
+import {
+  api,
+  Machine,
+  ScreenshotMeta,
+  AppUsage,
+  DomainRow,
+  TransferRow,
+  DownloadRow,
+  Alert,
+  formatBytes,
+} from "./api";
 
 type Stage = "login" | "mfa" | "app";
 
@@ -103,9 +113,12 @@ function MFA({
   );
 }
 
+type TopView = "machines" | "alerts";
+
 function Dashboard({ onLogout }: { onLogout: () => void }) {
   const [machines, setMachines] = useState<Machine[]>([]);
   const [selected, setSelected] = useState<Machine | null>(null);
+  const [view, setView] = useState<TopView>("machines");
 
   useEffect(() => {
     api.machines().then(setMachines).catch(() => setMachines([]));
@@ -116,6 +129,14 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
       <header>
         <strong>SystemCheck</strong>
         <span className="muted">transparent endpoint monitoring</span>
+        <nav>
+          <button className={"link" + (view === "machines" ? " sel" : "")} onClick={() => setView("machines")}>
+            Machines
+          </button>
+          <button className={"link" + (view === "alerts" ? " sel" : "")} onClick={() => setView("alerts")}>
+            Alerts
+          </button>
+        </nav>
         <button
           className="link right"
           onClick={async () => {
@@ -126,28 +147,32 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
           Sign out
         </button>
       </header>
-      <div className="body">
-        <aside>
-          <h3>Machines</h3>
-          {machines.length === 0 && <p className="muted">No machines enrolled yet.</p>}
-          {machines.map((m) => (
-            <div
-              key={m.id}
-              className={"machine" + (selected?.id === m.id ? " active" : "")}
-              onClick={() => setSelected(m)}
-            >
-              <div className="mono">{m.hostname}</div>
-              <div className="muted small">
-                {m.assigned_user || "unassigned"} · {m.group || "no group"}
+      {view === "alerts" ? (
+        <AlertsView />
+      ) : (
+        <div className="body">
+          <aside>
+            <h3>Machines</h3>
+            {machines.length === 0 && <p className="muted">No machines enrolled yet.</p>}
+            {machines.map((m) => (
+              <div
+                key={m.id}
+                className={"machine" + (selected?.id === m.id ? " active" : "")}
+                onClick={() => setSelected(m)}
+              >
+                <div className="mono">{m.hostname}</div>
+                <div className="muted small">
+                  {m.assigned_user || "unassigned"} · {m.group || "no group"}
+                </div>
+                <div className="small">
+                  {m.last_seen ? "last seen " + new Date(m.last_seen).toLocaleString() : "never seen"}
+                </div>
               </div>
-              <div className="small">
-                {m.last_seen ? "last seen " + new Date(m.last_seen).toLocaleString() : "never seen"}
-              </div>
-            </div>
-          ))}
-        </aside>
-        <main>{selected ? <MachineView machine={selected} /> : <Empty />}</main>
-      </div>
+            ))}
+          </aside>
+          <main>{selected ? <MachineView machine={selected} /> : <Empty />}</main>
+        </div>
+      )}
     </div>
   );
 }
@@ -155,50 +180,197 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
 function Empty() {
   return (
     <div className="muted pad">
-      Select a machine to view its screenshots and application usage. Every view is
-      recorded in the audit log.
+      Select a machine to view its activity. Every view is recorded in the audit log.
     </div>
   );
 }
 
+const TABS = ["apps", "screenshots", "domains", "transfers", "downloads"] as const;
+type Tab = (typeof TABS)[number];
+
 function MachineView({ machine }: { machine: Machine }) {
-  const [shots, setShots] = useState<ScreenshotMeta[]>([]);
-  const [apps, setApps] = useState<AppUsage[]>([]);
-
-  useEffect(() => {
-    api.screenshots(machine.id).then(setShots).catch(() => setShots([]));
-    api.apps(machine.id).then(setApps).catch(() => setApps([]));
-  }, [machine.id]);
-
+  const [tab, setTab] = useState<Tab>("apps");
   return (
     <div className="pad">
       <h2 className="mono">{machine.hostname}</h2>
-      <section>
-        <h3>Application usage (24h)</h3>
-        {apps.length === 0 && <p className="muted">No usage recorded.</p>}
-        <table>
-          <tbody>
-            {apps.map((a) => (
-              <tr key={a.process}>
-                <td className="mono">{a.process}</td>
-                <td className="right">{Math.round(a.active_sec / 60)} min</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
-      <section>
-        <h3>Screenshots</h3>
-        {shots.length === 0 && <p className="muted">No screenshots in range.</p>}
-        <div className="grid">
-          {shots.map((s) => (
-            <figure key={s.id}>
-              <img src={api.imageURL(s.id)} alt={s.ts} loading="lazy" />
-              <figcaption className="small">{new Date(s.ts).toLocaleString()}</figcaption>
-            </figure>
+      <div className="tabs">
+        {TABS.map((t) => (
+          <button key={t} className={"tab" + (tab === t ? " sel" : "")} onClick={() => setTab(t)}>
+            {t}
+          </button>
+        ))}
+      </div>
+      {tab === "apps" && <AppsTab id={machine.id} />}
+      {tab === "screenshots" && <ScreenshotsTab id={machine.id} />}
+      {tab === "domains" && <DomainsTab id={machine.id} />}
+      {tab === "transfers" && <TransfersTab id={machine.id} />}
+      {tab === "downloads" && <DownloadsTab id={machine.id} />}
+    </div>
+  );
+}
+
+function AppsTab({ id }: { id: string }) {
+  const [rows, setRows] = useState<AppUsage[]>([]);
+  useEffect(() => {
+    api.apps(id).then(setRows).catch(() => setRows([]));
+  }, [id]);
+  if (rows.length === 0) return <p className="muted">No usage recorded.</p>;
+  return (
+    <table>
+      <tbody>
+        {rows.map((a) => (
+          <tr key={a.process}>
+            <td className="mono">{a.process}</td>
+            <td className="right">{Math.round(a.active_sec / 60)} min</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+function ScreenshotsTab({ id }: { id: string }) {
+  const [shots, setShots] = useState<ScreenshotMeta[]>([]);
+  useEffect(() => {
+    api.screenshots(id).then(setShots).catch(() => setShots([]));
+  }, [id]);
+  if (shots.length === 0) return <p className="muted">No screenshots in range.</p>;
+  return (
+    <div className="grid">
+      {shots.map((s) => (
+        <figure key={s.id}>
+          <img src={api.imageURL(s.id)} alt={s.ts} loading="lazy" />
+          <figcaption className="small">{new Date(s.ts).toLocaleString()}</figcaption>
+        </figure>
+      ))}
+    </div>
+  );
+}
+
+function DomainsTab({ id }: { id: string }) {
+  const [rows, setRows] = useState<DomainRow[]>([]);
+  useEffect(() => {
+    api.domains(id).then(setRows).catch(() => setRows([]));
+  }, [id]);
+  if (rows.length === 0) return <p className="muted">No domains recorded (enable DNS in policy).</p>;
+  return (
+    <table>
+      <thead>
+        <tr>
+          <th className="left">Domain</th>
+          <th className="right">Queries</th>
+          <th className="right">Last seen</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((d) => (
+          <tr key={d.domain}>
+            <td className="mono">{d.domain}</td>
+            <td className="right">{d.count}</td>
+            <td className="right small">{new Date(d.last_seen).toLocaleString()}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+function TransfersTab({ id }: { id: string }) {
+  const [rows, setRows] = useState<TransferRow[]>([]);
+  useEffect(() => {
+    api.transfers(id).then(setRows).catch(() => setRows([]));
+  }, [id]);
+  if (rows.length === 0) return <p className="muted">No transfer data (enable netflow in policy).</p>;
+  return (
+    <table>
+      <thead>
+        <tr>
+          <th className="left">Process</th>
+          <th className="right">Uploaded</th>
+          <th className="right">Downloaded</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((t) => (
+          <tr key={t.process}>
+            <td className="mono">{t.process || "(unknown)"}</td>
+            <td className="right">{formatBytes(t.sent_bytes)}</td>
+            <td className="right">{formatBytes(t.recv_bytes)}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+function DownloadsTab({ id }: { id: string }) {
+  const [rows, setRows] = useState<DownloadRow[]>([]);
+  useEffect(() => {
+    api.downloads(id).then(setRows).catch(() => setRows([]));
+  }, [id]);
+  if (rows.length === 0) return <p className="muted">No downloads recorded (enable file watch in policy).</p>;
+  return (
+    <table>
+      <thead>
+        <tr>
+          <th className="left">File</th>
+          <th className="right">Size</th>
+          <th className="left">Source</th>
+          <th className="right">When</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((d, i) => (
+          <tr key={d.path + i}>
+            <td className="mono" title={d.url || d.path}>
+              {d.name}
+            </td>
+            <td className="right">{formatBytes(d.size)}</td>
+            <td className="small">{d.source}</td>
+            <td className="right small">{new Date(d.ts).toLocaleString()}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+function AlertsView() {
+  const [rows, setRows] = useState<Alert[]>([]);
+  const load = () => api.alerts().then(setRows).catch(() => setRows([]));
+  useEffect(() => {
+    load();
+  }, []);
+  return (
+    <div className="pad">
+      <h2>Alerts</h2>
+      {rows.length === 0 && <p className="muted">No alerts.</p>}
+      <table>
+        <tbody>
+          {rows.map((a) => (
+            <tr key={a.id} className={a.acknowledged ? "muted" : ""}>
+              <td>
+                <span className={"sev sev-" + a.severity}>{a.severity}</span>
+              </td>
+              <td>{a.message}</td>
+              <td className="right small">{new Date(a.ts).toLocaleString()}</td>
+              <td className="right">
+                {!a.acknowledged && (
+                  <button
+                    className="link"
+                    onClick={async () => {
+                      await api.ackAlert(a.id);
+                      load();
+                    }}
+                  >
+                    Acknowledge
+                  </button>
+                )}
+              </td>
+            </tr>
           ))}
-        </div>
-      </section>
+        </tbody>
+      </table>
     </div>
   );
 }

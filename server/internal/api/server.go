@@ -55,8 +55,17 @@ func (a *App) Router() http.Handler {
 	mux.Handle("GET /api/machines/{id}/screenshots", a.adminAuth(true, http.HandlerFunc(a.handleMachineScreenshots)))
 	mux.Handle("GET /api/machines/{id}/apps", a.adminAuth(true, http.HandlerFunc(a.handleMachineApps)))
 	mux.Handle("GET /api/machines/{id}/events", a.adminAuth(true, http.HandlerFunc(a.handleMachineEvents)))
+	mux.Handle("GET /api/machines/{id}/domains", a.adminAuth(true, http.HandlerFunc(a.handleMachineDomains)))
+	mux.Handle("GET /api/machines/{id}/transfers", a.adminAuth(true, http.HandlerFunc(a.handleMachineTransfers)))
+	mux.Handle("GET /api/machines/{id}/downloads", a.adminAuth(true, http.HandlerFunc(a.handleMachineDownloads)))
 	mux.Handle("GET /api/screenshots/{id}/image", a.adminAuth(true, http.HandlerFunc(a.handleScreenshotImage)))
 	mux.Handle("GET /api/audit", a.adminAuth(true, a.requireRole("admin", "auditor", http.HandlerFunc(a.handleAudit))))
+
+	// Alerts.
+	mux.Handle("GET /api/alerts", a.adminAuth(true, http.HandlerFunc(a.handleListAlerts)))
+	mux.Handle("POST /api/alerts/{id}/ack", a.adminAuth(true, http.HandlerFunc(a.handleAckAlert)))
+	mux.Handle("GET /api/alert-rules", a.adminAuth(true, http.HandlerFunc(a.handleListAlertRules)))
+	mux.Handle("POST /api/alert-rules", a.adminAuth(true, a.requireRole("admin", "", http.HandlerFunc(a.handleCreateAlertRule))))
 
 	// Enrollment token minting + consent + policy management (admin only).
 	mux.Handle("POST /api/enroll-tokens", a.adminAuth(true, a.requireRole("admin", "", http.HandlerFunc(a.handleCreateEnrollToken))))

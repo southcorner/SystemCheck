@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/southcorner/systemcheck/server/internal/alert"
 	"github.com/southcorner/systemcheck/server/internal/auth"
 	"github.com/southcorner/systemcheck/server/internal/model"
 )
@@ -82,6 +83,10 @@ func (a *App) handleIngest(w http.ResponseWriter, r *http.Request) {
 		a.Log.Printf("ingest error machine=%s: %v", m.ID, err)
 		writeErr(w, http.StatusInternalServerError, "ingest error")
 		return
+	}
+	// Evaluate alert rules against the batch (best-effort; never fails ingest).
+	if err := alert.Process(r.Context(), a.Store, m.ID, batch.Events); err != nil {
+		a.Log.Printf("alert eval error machine=%s: %v", m.ID, err)
 	}
 	writeJSON(w, http.StatusOK, model.IngestResponse{Accepted: n, Rejected: len(batch.Events) - n})
 }

@@ -42,7 +42,7 @@ type Policy struct {
 	Screenshot   ScreenshotPolicy `json:"screenshot"`
 	Foreground   ForegroundPolicy `json:"foreground"`
 	DNS          TogglePolicy     `json:"dns"`
-	Netflow      TogglePolicy     `json:"netflow"`
+	Netflow      NetflowPolicy    `json:"netflow"`
 	Fswatch      FswatchPolicy    `json:"fswatch"`
 	Exclusions   Exclusions       `json:"exclusions"`
 	HeartbeatSec int              `json:"heartbeat_sec"`
@@ -79,10 +79,17 @@ type TogglePolicy struct {
 	Enabled bool `json:"enabled"`
 }
 
+// NetflowPolicy configures per-process network byte accounting.
+type NetflowPolicy struct {
+	Enabled   bool `json:"enabled"`
+	RollupSec int  `json:"rollup_sec"`
+}
+
 // FswatchPolicy configures the filesystem-watch collector.
 type FswatchPolicy struct {
-	Enabled bool     `json:"enabled"`
-	Folders []string `json:"folders"`
+	Enabled               bool     `json:"enabled"`
+	Folders               []string `json:"folders"`
+	IncludeBrowserHistory bool     `json:"include_browser_history"`
 }
 
 // Exclusions lists domains/processes never recorded (privacy).
@@ -131,7 +138,7 @@ func DefaultPolicy() Policy {
 		},
 		Foreground:   ForegroundPolicy{Enabled: true, PollSec: 5, IdleThresholdSec: 120},
 		DNS:          TogglePolicy{Enabled: false},
-		Netflow:      TogglePolicy{Enabled: false},
+		Netflow:      NetflowPolicy{Enabled: false, RollupSec: 60},
 		Fswatch:      FswatchPolicy{Enabled: false, Folders: []string{`%USERPROFILE%\Downloads`}},
 		HeartbeatSec: 60,
 	}

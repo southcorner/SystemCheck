@@ -24,6 +24,26 @@ export type ScreenshotMeta = {
 
 export type AppUsage = { process: string; active_sec: number };
 
+export type DomainRow = { domain: string; count: number; last_seen: string };
+export type TransferRow = { process: string; sent_bytes: number; recv_bytes: number };
+export type DownloadRow = {
+  ts: string;
+  name: string;
+  path: string;
+  size: number;
+  url: string;
+  source: string;
+};
+export type Alert = {
+  id: string;
+  machine_id: string;
+  ts: string;
+  severity: string;
+  message: string;
+  data: Record<string, unknown>;
+  acknowledged: boolean;
+};
+
 async function req<T>(path: string, opts: RequestInit = {}): Promise<T> {
   const res = await fetch(path, {
     ...opts,
@@ -56,5 +76,25 @@ export const api = {
   screenshots: (id: string) =>
     req<ScreenshotMeta[]>(`/api/machines/${id}/screenshots`),
   apps: (id: string) => req<AppUsage[]>(`/api/machines/${id}/apps`),
+  domains: (id: string) => req<DomainRow[]>(`/api/machines/${id}/domains`),
+  transfers: (id: string) => req<TransferRow[]>(`/api/machines/${id}/transfers`),
+  downloads: (id: string) => req<DownloadRow[]>(`/api/machines/${id}/downloads`),
+  alerts: (unacked = false) =>
+    req<Alert[]>(`/api/alerts${unacked ? "?unacked=true" : ""}`),
+  ackAlert: (id: string) =>
+    req<{ ok: boolean }>(`/api/alerts/${id}/ack`, { method: "POST" }),
   imageURL: (screenshotID: string) => `/api/screenshots/${screenshotID}/image`,
 };
+
+// formatBytes renders a byte count in human units.
+export function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  const units = ["KB", "MB", "GB", "TB"];
+  let v = n / 1024;
+  let i = 0;
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024;
+    i++;
+  }
+  return `${v.toFixed(1)} ${units[i]}`;
+}
