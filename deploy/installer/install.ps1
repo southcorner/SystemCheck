@@ -65,7 +65,12 @@ catch { Write-Warning "Service did not start yet: $($_.Exception.Message). Check
 if (Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue) {
     Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false
 }
-$action    = New-ScheduledTaskAction -Execute "$InstallDir\agent.exe" -Argument "-session-agent" -WorkingDirectory $InstallDir
+# Launch the helper via a hidden VBScript shim so no console window flashes on
+# the user's screen at logon (the consent dialog still shows normally).
+$vbsPath = Join-Path $InstallDir "run-session.vbs"
+$vbs = 'CreateObject("Wscript.Shell").Run """' + (Join-Path $InstallDir "agent.exe") + '"" -session-agent", 0, False'
+[System.IO.File]::WriteAllText($vbsPath, $vbs, (New-Object System.Text.ASCIIEncoding))
+$action    = New-ScheduledTaskAction -Execute "wscript.exe" -Argument "`"$vbsPath`""
 $trigger   = New-ScheduledTaskTrigger -AtLogOn
 # BUILTIN\Users (S-1-5-32-545): the task runs for whoever logs on, as that user.
 $principal = New-ScheduledTaskPrincipal -GroupId "S-1-5-32-545" -RunLevel Limited
