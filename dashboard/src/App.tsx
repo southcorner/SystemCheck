@@ -11,8 +11,16 @@ import {
   Alert,
   AdminUser,
   ViewRequest,
+  Policy,
   formatBytes,
 } from "./api";
+
+// A machine is "online" if its last heartbeat was within this window.
+const ONLINE_WINDOW_MS = 15 * 60 * 1000;
+function isOnline(lastSeen: string | null): boolean {
+  if (!lastSeen) return false;
+  return Date.now() - new Date(lastSeen).getTime() < ONLINE_WINDOW_MS;
+}
 
 type Stage = "login" | "mfa" | "app";
 
@@ -116,7 +124,7 @@ function MFA({
   );
 }
 
-type TopView = "machines" | "alerts" | "approvals" | "users";
+type TopView = "machines" | "alerts" | "approvals" | "users" | "settings";
 
 function Dashboard({ onLogout }: { onLogout: () => void }) {
   const [machines, setMachines] = useState<Machine[]>([]);
@@ -125,8 +133,12 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
   const [role, setRole] = useState<string>("viewer");
 
   useEffect(() => {
-    api.machines().then(setMachines).catch(() => setMachines([]));
+    const load = () => api.machines().then(setMachines).catch(() => setMachines([]));
+    load();
     api.me().then((m) => setRole(m.role)).catch(() => setRole("viewer"));
+    // Refresh periodically so the online/offline indicator stays current.
+    const t = setInterval(load, 60 * 1000);
+    return () => clearInterval(t);
   }, []);
 
   const navBtn = (v: TopView, label: string) => (
@@ -145,6 +157,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
           {navBtn("alerts", "Alerts")}
           {navBtn("approvals", "Approvals")}
           {role === "admin" && navBtn("users", "Users")}
+          {role === "admin" && navBtn("settings", "Settings")}
         </nav>
         <button
           className="link right"
@@ -159,6 +172,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
       {view === "alerts" && <AlertsView />}
       {view === "approvals" && <ApprovalsView />}
       {view === "users" && <UsersView />}
+      {view === "settings" && <SettingsView />}
       {view === "machines" && (
         <div className="body">
           <aside>
@@ -170,7 +184,20 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
                 className={"machine" + (selected?.id === m.id ? " active" : "")}
                 onClick={() => setSelected(m)}
               >
-                <div className="mono">{m.hostname}</div>
+                <div className="mono">
+                  <span
+                    title={isOnline(m.last_seen) ? "Online (seen in last 15 min)" : "Offline"}
+                    style={{
+                      display: "inline-block",
+                      width: 9,
+                      height: 9,
+                      borderRadius: "50%",
+                      marginRight: 6,
+                      background: isOnline(m.last_seen) ? "#22c55e" : "#ef4444",
+                    }}
+                  />
+                  {m.hostname}
+                </div>
                 <div className="muted small">
                   {m.assigned_user || "unassigned"} · {m.group || "no group"}
                 </div>
@@ -191,6 +218,125 @@ function Empty() {
   return (
     <div className="muted pad">
       Select a machine to view its activity. Every view is recorded in the audit log.
+    </div>
+  );
+}
+
+const COLLECTORS: { key: keyof Policy; label: string; note?: string }[] = [
+  { key: "screenshot", label: "Screenshots" },
+  { key: "foreground", label: "App usage (foreground)" },
+  { key: "dns", label: "DNS lookups" },
+  { key: "netflow", label: "Network transfers" },
+  { key: "fswatch", label: "File watch / downloads" },
+  { key: "usb", label: "USB / removable media" },
+  { key: "printjobs", label: "Print jobs" },
+  { key: "installs", label: "Software installs" },
+  { key: "posture", label: "Device posture" },
+  { key: "seclog", label: "Security log" },
+];
+
+function SettingsView() {
+  const [group, setGroup] = useState("default");
+  const [pol, setPol] = useState<Policy | null>(null);
+  const [status, setStatus] = useState<string>("");
+  const [loading, setLoading] = useState(true);
+
+  const load = (g: string) => {
+    setLoading(true);
+    setStatus("");
+    api
+      .getPolicy(g)
+      .then((r) => {
+        setPol(r.policy);
+        setStatus(r.version ? `Editing policy v${r.version} for group “${g}”.` : `No saved policy for “${g}” — showing defaults.`);
+      })
+      .catch((e) => setStatus("Load failed: " + (e as Error).message))
+      .finally(() => setLoading(false));
+  };
+  useEffect(() => load(group), []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const setEnabled = (key: keyof Policy, v: boolean) => {
+    if (!pol) return;
+    setPol({ ...pol, [key]: { ...(pol[key] as object), enabled: v } });
+  };
+  const setShot = (field: string, v: number) => {
+    if (!pol) return;
+    setPol({ ...pol, screenshot: { ...pol.screenshot, [field]: v } });
+  };
+
+  const save = () => {
+    if (!pol) return;
+    setStatus("Saving…");
+    api
+      .setPolicy(group, pol)
+      .then((r) => setStatus(`Saved as v${r.version}. Agents in “${group}” apply it within ~5 minutes.`))
+      .catch((e) => setStatus("Save failed: " + (e as Error).message));
+  };
+
+  return (
+    <div className="pad" style={{ maxWidth: 620 }}>
+      <h2>Monitoring settings</h2>
+      <div style={{ display: "flex", gap: 8, alignItems: "center", margin: "8px 0 4px" }}>
+        <label>Group</label>
+        <input value={group} onChange={(e) => setGroup(e.target.value)} style={{ width: 160 }} />
+        <button className="link" onClick={() => load(group)}>Load</button>
+      </div>
+      <p className="muted small">
+        Settings apply to all machines enrolled in this group. Collection still
+        requires each user's recorded consent.
+      </p>
+
+      {loading || !pol ? (
+        <p className="muted">{status || "Loading…"}</p>
+      ) : (
+        <>
+          <h3>Collectors</h3>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+            {COLLECTORS.map(({ key, label }) => (
+              <label key={String(key)} style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                <input
+                  type="checkbox"
+                  checked={(pol[key] as { enabled: boolean }).enabled}
+                  onChange={(e) => setEnabled(key, e.target.checked)}
+                />
+                {label}
+              </label>
+            ))}
+          </div>
+
+          <h3 style={{ marginTop: 16 }}>Screenshot interval</h3>
+          <p className="muted small">
+            A screenshot is taken at a random moment between the min and max
+            interval, then it repeats. Set min = max for a fixed interval.
+          </p>
+          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", alignItems: "center" }}>
+            <label>Min (sec)
+              <input type="number" min={5} value={pol.screenshot.min_interval_sec}
+                onChange={(e) => setShot("min_interval_sec", Number(e.target.value))}
+                style={{ width: 90, marginLeft: 6 }} />
+            </label>
+            <label>Max (sec)
+              <input type="number" min={5} value={pol.screenshot.max_interval_sec}
+                onChange={(e) => setShot("max_interval_sec", Number(e.target.value))}
+                style={{ width: 90, marginLeft: 6 }} />
+            </label>
+            <label>Quality (1–100)
+              <input type="number" min={1} max={100} value={pol.screenshot.quality}
+                onChange={(e) => setShot("quality", Number(e.target.value))}
+                style={{ width: 80, marginLeft: 6 }} />
+            </label>
+          </div>
+          <p className="muted small" style={{ marginTop: 6 }}>
+            ≈ every {Math.round(pol.screenshot.min_interval_sec / 60)}–
+            {Math.round(pol.screenshot.max_interval_sec / 60)} min.
+          </p>
+
+          <div style={{ marginTop: 16 }}>
+            <button onClick={save}>Save settings</button>
+          </div>
+        </>
+      )}
+      {status && !loading && <p className="muted small" style={{ marginTop: 8 }}>{status}</p>}
     </div>
   );
 }

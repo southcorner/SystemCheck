@@ -65,6 +65,32 @@ export type Alert = {
   acknowledged: boolean;
 };
 
+export type Policy = {
+  version: number;
+  active?: boolean;
+  screenshot: {
+    enabled: boolean;
+    min_interval_sec: number;
+    max_interval_sec: number;
+    max_width: number;
+    format: string;
+    quality: number;
+    blur_regions?: unknown[];
+  };
+  foreground: { enabled: boolean; poll_sec: number; idle_threshold_sec: number };
+  dns: { enabled: boolean };
+  netflow: { enabled: boolean; rollup_sec: number };
+  fswatch: { enabled: boolean; folders: string[]; include_browser_history: boolean };
+  usb: { enabled: boolean };
+  printjobs: { enabled: boolean };
+  installs: { enabled: boolean };
+  posture: { enabled: boolean; interval_sec: number };
+  seclog: { enabled: boolean };
+  exclusions?: { domains: string[]; processes: string[] };
+  heartbeat_sec: number;
+};
+export type GroupPolicy = { group: string; version: number; policy: Policy };
+
 async function req<T>(path: string, opts: RequestInit = {}): Promise<T> {
   const res = await fetch(path, {
     ...opts,
@@ -143,6 +169,15 @@ export const api = {
     }),
   approveView: (id: string) =>
     req<{ ok: boolean }>(`/api/view-requests/${id}/approve`, { method: "POST" }),
+
+  // Policy settings (admin).
+  getPolicy: (group = "default") =>
+    req<GroupPolicy>(`/api/policy?group=${encodeURIComponent(group)}`),
+  setPolicy: (group: string, policy: Policy) =>
+    req<GroupPolicy>(`/api/policy`, {
+      method: "PUT",
+      body: JSON.stringify({ group, policy }),
+    }),
 };
 
 // formatBytes renders a byte count in human units.
