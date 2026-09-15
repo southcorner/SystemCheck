@@ -2,10 +2,15 @@
 package config
 
 import (
+	"bytes"
 	"encoding/json"
 	"os"
 	"path/filepath"
 )
+
+// DefaultDataDir returns the platform default data directory (used for early
+// logging before the config file is read).
+func DefaultDataDir() string { return defaultDataDir() }
 
 // Config is the agent's on-disk configuration.
 type Config struct {
@@ -27,6 +32,9 @@ func (c *Config) statePath() string { return filepath.Join(c.DataDir, "state.jso
 func Load(path string) (*Config, error) {
 	c := &Config{DataDir: defaultDataDir()}
 	if b, err := os.ReadFile(path); err == nil {
+		// Tolerate a UTF-8 BOM: Windows PowerShell's Set-Content -Encoding UTF8
+		// prepends one, which the JSON parser would otherwise reject.
+		b = bytes.TrimPrefix(b, []byte{0xEF, 0xBB, 0xBF})
 		if err := json.Unmarshal(b, c); err != nil {
 			return nil, err
 		}

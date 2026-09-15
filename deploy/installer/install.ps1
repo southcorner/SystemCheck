@@ -25,11 +25,14 @@ New-Item -ItemType Directory -Force -Path $spool | Out-Null
 Copy-Item -Force (Join-Path $here "agent.exe") (Join-Path $InstallDir "agent.exe")
 # CA + enrollment config in the data dir.
 Copy-Item -Force (Join-Path $here "ca.crt") (Join-Path $DataDir "ca.crt")
-@{
+# Write UTF-8 WITHOUT a BOM: Set-Content -Encoding UTF8 on Windows PowerShell 5.1
+# prepends a BOM that Go's JSON parser rejects.
+$agentJson = @{
     server_url   = $ServerUrl
     data_dir     = ($DataDir -replace '\\','/')   # forward slashes: valid JSON, Go accepts on Windows
     enroll_token = $EnrollToken
-} | ConvertTo-Json | Set-Content -Path (Join-Path $DataDir "agent.json") -Encoding UTF8
+} | ConvertTo-Json
+[System.IO.File]::WriteAllText((Join-Path $DataDir "agent.json"), $agentJson, (New-Object System.Text.UTF8Encoding($false)))
 
 # --- ACLs ---------------------------------------------------------------
 # Data-dir root: only SYSTEM + Administrators may read files (protects the

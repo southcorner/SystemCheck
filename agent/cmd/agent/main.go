@@ -28,15 +28,18 @@ func main() {
 	sessionAgent := flag.Bool("session-agent", false, "run the user-session helper (screenshots + foreground app) instead of the service; launched per-user at logon")
 	flag.Parse()
 
+	// Log to a file so failures are diagnosable when there is no console (the
+	// service has no stdout). Start at the default data dir so even a config-load
+	// error is captured; re-point if the config overrides the data dir.
+	setupLogging(config.DefaultDataDir(), *sessionAgent)
+
 	cfg, err := config.Load(*cfgPath)
 	if err != nil {
 		log.Fatalf("config: %v", err)
 	}
-
-	// Log to a file so failures are diagnosable when there is no console (the
-	// service has no stdout). Service/console -> data dir; the unprivileged
-	// session helper -> the user-writable spool dir.
-	setupLogging(cfg, *sessionAgent)
+	if cfg.DataDir != config.DefaultDataDir() {
+		setupLogging(cfg.DataDir, *sessionAgent)
+	}
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
@@ -62,12 +65,12 @@ func defaultConfigPath() string {
 	return defaultConfigPathOS()
 }
 
-// setupLogging tees the log to a rolling-ish file (in addition to stderr) so
-// the service's startup and runtime errors are visible without a console.
-func setupLogging(cfg *config.Config, sessionAgent bool) {
-	path := filepath.Join(cfg.DataDir, "agent.log")
+// setupLogging tees the log to a file (in addition to stderr) so the service's
+// startup and runtime errors are visible without a console.
+func setupLogging(dataDir string, sessionAgent bool) {
+	path := filepath.Join(dataDir, "agent.log")
 	if sessionAgent {
-		path = filepath.Join(cfg.SpoolDir(), "agent-session.log")
+		path = filepath.Join(dataDir, "spool", "agent-session.log")
 	}
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o640)
 	if err != nil {

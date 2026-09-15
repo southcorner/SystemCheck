@@ -24,11 +24,13 @@ Copy-Item -Force $CaCrt    (Join-Path $stage "ca.crt")
 
 # agent.json: forward slashes in data_dir avoid JSON backslash-escaping pitfalls;
 # Go accepts them on Windows.
-@{
+# UTF-8 without BOM (Go's JSON parser rejects a BOM).
+$agentJson = @{
     server_url   = $ServerUrl
     data_dir     = "C:/ProgramData/SystemCheck"
     enroll_token = $EnrollToken
-} | ConvertTo-Json | Set-Content -Path (Join-Path $stage "agent.json") -Encoding UTF8
+} | ConvertTo-Json
+[System.IO.File]::WriteAllText((Join-Path $stage "agent.json"), $agentJson, (New-Object System.Text.UTF8Encoding($false)))
 
 $msi = Join-Path $OutDir "SystemCheckAgent.msi"
 wix build $wxs -d "Stage=$((Resolve-Path $stage).Path)" -o $msi
