@@ -1,9 +1,14 @@
 # Go
 /server/server
+/server/systemcheck-server.exe
 /agent/agent
 /agent/agent.exe
 *.test
 *.out
+
+# Local run state and staged handover artifacts
+.run/
+handover-out/
 
 # Node / dashboard
 node_modules/
