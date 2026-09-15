@@ -8,9 +8,11 @@ package main
 import (
 	"context"
 	"flag"
+	"io"
 	"log"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 
 	"github.com/southcorner/systemcheck/agent/internal/config"
@@ -30,6 +32,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("config: %v", err)
 	}
+
+	// Log to a file so failures are diagnosable when there is no console (the
+	// service has no stdout). Service/console -> data dir; the unprivileged
+	// session helper -> the user-writable spool dir.
+	setupLogging(cfg, *sessionAgent)
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
@@ -53,6 +60,22 @@ func defaultConfigPath() string {
 		return v
 	}
 	return defaultConfigPathOS()
+}
+
+// setupLogging tees the log to a rolling-ish file (in addition to stderr) so
+// the service's startup and runtime errors are visible without a console.
+func setupLogging(cfg *config.Config, sessionAgent bool) {
+	path := filepath.Join(cfg.DataDir, "agent.log")
+	if sessionAgent {
+		path = filepath.Join(cfg.SpoolDir(), "agent-session.log")
+	}
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o640)
+	if err != nil {
+		log.Printf("log file %s: %v (continuing with stderr only)", path, err)
+		return
+	}
+	log.SetOutput(io.MultiWriter(os.Stderr, f))
+	log.Printf("=== agent starting (session_helper=%v, pid=%d) ===", sessionAgent, os.Getpid())
 }
 
 // runConsole runs the agent in the foreground.
