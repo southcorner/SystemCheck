@@ -78,6 +78,14 @@ async function req<T>(path: string, opts: RequestInit = {}): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+// List endpoints: the server serializes an empty slice as JSON `null`, which
+// would make callers crash on `.length`/`.map`. Coerce null to an empty array
+// so list results are always safe to iterate.
+async function reqList<T>(path: string, opts: RequestInit = {}): Promise<T[]> {
+  const r = await req<T[] | null>(path, opts);
+  return r ?? [];
+}
+
 export const api = {
   login: (email: string, password: string) =>
     req<{ mfa_required: boolean; role: string }>("/api/login", {
@@ -93,23 +101,23 @@ export const api = {
     req<{ secret: string; uri: string }>("/api/mfa/enroll", { method: "POST" }),
   me: () => req<{ email: string; role: string; mfa_enabled: boolean }>("/api/me"),
   logout: () => req<{ ok: boolean }>("/api/logout", { method: "POST" }),
-  machines: () => req<Machine[]>("/api/machines"),
+  machines: () => reqList<Machine>("/api/machines"),
   screenshots: (id: string) =>
-    req<ScreenshotMeta[]>(`/api/machines/${id}/screenshots`),
-  apps: (id: string) => req<AppUsage[]>(`/api/machines/${id}/apps`),
-  domains: (id: string) => req<DomainRow[]>(`/api/machines/${id}/domains`),
-  transfers: (id: string) => req<TransferRow[]>(`/api/machines/${id}/transfers`),
-  downloads: (id: string) => req<DownloadRow[]>(`/api/machines/${id}/downloads`),
+    reqList<ScreenshotMeta>(`/api/machines/${id}/screenshots`),
+  apps: (id: string) => reqList<AppUsage>(`/api/machines/${id}/apps`),
+  domains: (id: string) => reqList<DomainRow>(`/api/machines/${id}/domains`),
+  transfers: (id: string) => reqList<TransferRow>(`/api/machines/${id}/transfers`),
+  downloads: (id: string) => reqList<DownloadRow>(`/api/machines/${id}/downloads`),
   events: (id: string, kind: string) =>
-    req<EventRow[]>(`/api/machines/${id}/events?kind=${encodeURIComponent(kind)}`),
+    reqList<EventRow>(`/api/machines/${id}/events?kind=${encodeURIComponent(kind)}`),
   alerts: (unacked = false) =>
-    req<Alert[]>(`/api/alerts${unacked ? "?unacked=true" : ""}`),
+    reqList<Alert>(`/api/alerts${unacked ? "?unacked=true" : ""}`),
   ackAlert: (id: string) =>
     req<{ ok: boolean }>(`/api/alerts/${id}/ack`, { method: "POST" }),
   imageURL: (screenshotID: string) => `/api/screenshots/${screenshotID}/image`,
 
   // User management (admin only).
-  users: () => req<AdminUser[]>("/api/users"),
+  users: () => reqList<AdminUser>("/api/users"),
   createUser: (email: string, password: string, role: string) =>
     req<{ id: string }>("/api/users", {
       method: "POST",
@@ -127,7 +135,7 @@ export const api = {
     }),
 
   // Dual-approval view requests.
-  viewRequests: () => req<ViewRequest[]>("/api/view-requests"),
+  viewRequests: () => reqList<ViewRequest>("/api/view-requests"),
   requestView: (machineID: string, reason: string) =>
     req<{ id: string }>("/api/view-requests", {
       method: "POST",
