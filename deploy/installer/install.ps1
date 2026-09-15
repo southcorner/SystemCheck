@@ -53,7 +53,10 @@ if (Get-Service $ServiceName -ErrorAction SilentlyContinue) {
 New-Service -Name $ServiceName -BinaryPathName "`"$InstallDir\agent.exe`"" `
     -DisplayName "SystemCheck Agent" -StartupType Automatic `
     -Description "Transparent endpoint monitoring agent (company policy applies)." | Out-Null
-Start-Service $ServiceName
+# Don't let a start hiccup abort the rest of setup (the session-helper task
+# below must still be registered). Report status at the end instead.
+try { Start-Service $ServiceName -ErrorAction Stop }
+catch { Write-Warning "Service did not start yet: $($_.Exception.Message). Check C:\ProgramData\SystemCheck\agent.log" }
 
 # --- Session helper task (per logged-in user: screenshots + foreground) --
 # Runs agent.exe -session-agent at each user's logon, in their interactive
@@ -71,8 +74,11 @@ $settings  = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGo
 Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger `
     -Principal $principal -Settings $settings -Description "SystemCheck user-session helper (screenshots, app usage)." | Out-Null
 
+$svcState  = (Get-Service $ServiceName -ErrorAction SilentlyContinue).Status
+$taskState = (Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue).State
 Write-Host "SystemCheck installed:"
-Write-Host "  service '$ServiceName' (running) - privileged collectors"
-Write-Host "  task    '$TaskName' - session helper, starts at each user's next logon"
+Write-Host "  service '$ServiceName' : $svcState  (privileged collectors)"
+Write-Host "  task    '$TaskName' : $taskState  (session helper: screenshots + apps)"
 Write-Host "NOTE: staff are shown a consent notice on first logon; collection stays off until accepted."
-Write-Host "To start the helper now without re-logon, have the signed-in user log off and back on."
+Write-Host "The session helper starts at the user's next logon. To start it now without"
+Write-Host "re-logon, run (as the signed-in user):  Start-ScheduledTask -TaskName $TaskName"
