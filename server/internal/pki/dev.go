@@ -7,6 +7,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"fmt"
 	"math/big"
 	"net"
 	"os"
@@ -32,36 +33,49 @@ func EnsureDevCerts(caCert, caKey, srvCert, srvKey string, extraSANs ...string) 
 		}
 	}
 
-	// CA
-	caKeyPriv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	if err != nil {
-		return err
-	}
-	caTmpl := &x509.Certificate{
-		SerialNumber:          big.NewInt(1),
-		Subject:               pkix.Name{CommonName: "SystemCheck Dev CA"},
-		NotBefore:             time.Now().Add(-time.Hour),
-		NotAfter:              time.Now().Add(10 * 365 * 24 * time.Hour),
-		IsCA:                  true,
-		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
-		BasicConstraintsValid: true,
-	}
-	caDER, err := x509.CreateCertificate(rand.Reader, caTmpl, caTmpl, &caKeyPriv.PublicKey, caKeyPriv)
-	if err != nil {
-		return err
-	}
-	if err := writeCert(caCert, caDER); err != nil {
-		return err
-	}
-	if err := writeKey(caKey, caKeyPriv); err != nil {
-		return err
+	// CA: reuse the existing CA if it is present, so the server leaf cert can be
+	// rotated (e.g. to add a new SAN when the server's address changes) WITHOUT
+	// changing the CA. Agents keep trusting ca.crt and need no re-enrollment.
+	// A new CA is minted only on first run (when ca.crt/ca.key are absent).
+	var caParsed *x509.Certificate
+	var caKeyPriv *ecdsa.PrivateKey
+	var err error
+	if fileExists(caCert) && fileExists(caKey) {
+		caParsed, caKeyPriv, err = loadCA(caCert, caKey)
+		if err != nil {
+			return err
+		}
+	} else {
+		caKeyPriv, err = ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		if err != nil {
+			return err
+		}
+		caTmpl := &x509.Certificate{
+			SerialNumber:          big.NewInt(1),
+			Subject:               pkix.Name{CommonName: "SystemCheck Dev CA"},
+			NotBefore:             time.Now().Add(-time.Hour),
+			NotAfter:              time.Now().Add(10 * 365 * 24 * time.Hour),
+			IsCA:                  true,
+			KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageCRLSign,
+			BasicConstraintsValid: true,
+		}
+		caDER, err := x509.CreateCertificate(rand.Reader, caTmpl, caTmpl, &caKeyPriv.PublicKey, caKeyPriv)
+		if err != nil {
+			return err
+		}
+		if err := writeCert(caCert, caDER); err != nil {
+			return err
+		}
+		if err := writeKey(caKey, caKeyPriv); err != nil {
+			return err
+		}
+		caParsed, err = x509.ParseCertificate(caDER)
+		if err != nil {
+			return err
+		}
 	}
 
 	// Server cert signed by the CA.
-	caParsed, err := x509.ParseCertificate(caDER)
-	if err != nil {
-		return err
-	}
 	srvKeyPriv, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
 		return err
@@ -102,6 +116,40 @@ func EnsureDevCerts(caCert, caKey, srvCert, srvKey string, extraSANs ...string) 
 func fileExists(p string) bool {
 	_, err := os.Stat(p)
 	return err == nil
+}
+
+// loadCA reads an existing CA certificate and its ECDSA private key, so the
+// server leaf cert can be re-signed under the same CA.
+func loadCA(certPath, keyPath string) (*x509.Certificate, *ecdsa.PrivateKey, error) {
+	cb, err := os.ReadFile(certPath)
+	if err != nil {
+		return nil, nil, err
+	}
+	cblk, _ := pem.Decode(cb)
+	if cblk == nil {
+		return nil, nil, fmt.Errorf("ca cert: invalid PEM")
+	}
+	cert, err := x509.ParseCertificate(cblk.Bytes)
+	if err != nil {
+		return nil, nil, err
+	}
+	kb, err := os.ReadFile(keyPath)
+	if err != nil {
+		return nil, nil, err
+	}
+	kblk, _ := pem.Decode(kb)
+	if kblk == nil {
+		return nil, nil, fmt.Errorf("ca key: invalid PEM")
+	}
+	key, err := x509.ParsePKCS8PrivateKey(kblk.Bytes)
+	if err != nil {
+		return nil, nil, err
+	}
+	ec, ok := key.(*ecdsa.PrivateKey)
+	if !ok {
+		return nil, nil, fmt.Errorf("ca key: not ECDSA")
+	}
+	return cert, ec, nil
 }
 
 func writeCert(path string, der []byte) error {
