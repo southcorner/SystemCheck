@@ -3,12 +3,16 @@
 /server/systemcheck-server.exe
 /agent/agent
 /agent/agent.exe
+*.exe~
 *.test
 *.out
 
 # Local run state and staged handover artifacts
 .run/
 handover-out/
+
+# MSI build output (staged binary + baked enroll token; never commit)
+deploy/installer/build/
 
 # Node / dashboard
 node_modules/

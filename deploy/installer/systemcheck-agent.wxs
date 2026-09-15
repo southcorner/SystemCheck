@@ -1,10 +1,17 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  Minimal WiX v4 manifest for the SystemCheck agent MSI. Installs agent.exe and
-  registers the Windows service. Build in CI:
-    wix build deploy/installer/systemcheck-agent.wxs -o SystemCheckAgent.msi
-  Then code-sign the MSI with signtool. Enrollment config (server URL + one-time
-  token) is supplied post-install via agent.json or MSI properties, per policy.
+  WiX v4/v5 manifest for the SystemCheck agent MSI. Produces a single-run
+  installer that drops the three required files and registers the Windows
+  service (no console, auto-start).
+
+    - %ProgramFiles%\SystemCheck\agent.exe           (+ SystemCheckAgent service)
+    - %ProgramData%\SystemCheck\ca.crt               (dev CA the agent trusts)
+    - %ProgramData%\SystemCheck\agent.json           (server URL + enroll token)
+
+  Build (sources come from a staging dir passed as $(Stage)):
+    wix build deploy/installer/systemcheck-agent.wxs -d Stage=<staging> -o SystemCheckAgent.msi
+  where <staging> contains agent.exe, ca.crt and agent.json. Then code-sign the
+  MSI with signtool for production. Silent install:  msiexec /i SystemCheckAgent.msi /qn
 -->
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
   <Package Name="SystemCheck Agent" Manufacturer="SystemCheck"
@@ -12,10 +19,11 @@
     <MajorUpgrade DowngradeErrorMessage="A newer version is already installed." />
     <MediaTemplate EmbedCab="yes" />
 
+    <!-- Binary + service under Program Files. -->
     <StandardDirectory Id="ProgramFiles64Folder">
       <Directory Id="INSTALLDIR" Name="SystemCheck">
         <Component Id="AgentExe" Guid="1f8b4c2e-9a3d-4c5e-8b6a-000000000002">
-          <File Id="agent.exe" Source="agent/agent.exe" KeyPath="yes" />
+          <File Id="agent.exe" Source="$(Stage)\agent.exe" KeyPath="yes" />
           <ServiceInstall Id="AgentSvc" Name="SystemCheckAgent"
                           DisplayName="SystemCheck Agent" Start="auto" Type="ownProcess"
                           ErrorControl="normal"
@@ -26,8 +34,23 @@
       </Directory>
     </StandardDirectory>
 
+    <!-- Trust anchor + enrollment config under ProgramData (the agent's default
+         data dir). Installed before StartServices, so the service finds them. -->
+    <StandardDirectory Id="CommonAppDataFolder">
+      <Directory Id="DATADIR" Name="SystemCheck">
+        <Component Id="CaCrt" Guid="1f8b4c2e-9a3d-4c5e-8b6a-000000000003">
+          <File Id="ca.crt" Source="$(Stage)\ca.crt" KeyPath="yes" />
+        </Component>
+        <Component Id="AgentJson" Guid="1f8b4c2e-9a3d-4c5e-8b6a-000000000004">
+          <File Id="agent.json" Source="$(Stage)\agent.json" KeyPath="yes" />
+        </Component>
+      </Directory>
+    </StandardDirectory>
+
     <Feature Id="Main">
       <ComponentRef Id="AgentExe" />
+      <ComponentRef Id="CaCrt" />
+      <ComponentRef Id="AgentJson" />
     </Feature>
   </Package>
 </Wix>
