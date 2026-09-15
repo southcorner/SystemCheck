@@ -84,9 +84,20 @@ func (s *Store) TouchMachine(ctx context.Context, id, agentVersion string) error
 
 // CreateEnrollmentToken stores a hashed one-time token.
 func (s *Store) CreateEnrollmentToken(ctx context.Context, tokenHash, group, assignedUser string, expires time.Time) error {
+	return s.CreateEnrollmentTokenEx(ctx, tokenHash, group, assignedUser, expires, false, 0)
+}
+
+// CreateEnrollmentTokenEx stores a hashed token that may be reusable. When
+// reusable is true the token enrolls up to maxUses machines within its TTL
+// (maxUses <= 0 means unlimited); when false it is single-use.
+func (s *Store) CreateEnrollmentTokenEx(ctx context.Context, tokenHash, group, assignedUser string, expires time.Time, reusable bool, maxUses int) error {
+	var mu any
+	if reusable && maxUses > 0 {
+		mu = maxUses
+	}
 	_, err := s.Pool.Exec(ctx,
-		`INSERT INTO enrollment_tokens(token_hash, "group", assigned_user, expires_at)
-		 VALUES($1,$2,$3,$4)`, tokenHash, nullify(group), nullify(assignedUser), expires)
+		`INSERT INTO enrollment_tokens(token_hash, "group", assigned_user, expires_at, reusable, max_uses)
+		 VALUES($1,$2,$3,$4,$5,$6)`, tokenHash, nullify(group), nullify(assignedUser), expires, reusable, mu)
 	return err
 }
 
@@ -96,13 +107,21 @@ type EnrollmentToken struct {
 	AssignedUser string
 }
 
-// ConsumeEnrollmentToken atomically validates and marks a token used.
+// ConsumeEnrollmentToken atomically validates and consumes a token. A
+// single-use token (reusable = false) is valid only while unused. A reusable
+// token is valid while not expired and under its max_uses cap (NULL = no cap).
+// Every successful consume increments use_count and stamps used_at on first use.
 func (s *Store) ConsumeEnrollmentToken(ctx context.Context, tokenHash string) (*EnrollmentToken, error) {
 	t := &EnrollmentToken{}
 	var group, user *string
 	err := s.Pool.QueryRow(ctx,
-		`UPDATE enrollment_tokens SET used_at=now()
-		   WHERE token_hash=$1 AND used_at IS NULL AND expires_at > now()
+		`UPDATE enrollment_tokens
+		    SET use_count = use_count + 1,
+		        used_at   = COALESCE(used_at, now())
+		  WHERE token_hash = $1
+		    AND expires_at > now()
+		    AND ( (NOT reusable AND used_at IS NULL)
+		          OR (reusable AND (max_uses IS NULL OR use_count < max_uses)) )
 		 RETURNING "group", assigned_user`, tokenHash,
 	).Scan(&group, &user)
 	if err != nil {

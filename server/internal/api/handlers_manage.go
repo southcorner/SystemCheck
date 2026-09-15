@@ -13,11 +13,15 @@ type enrollTokenReq struct {
 	Group        string `json:"group"`
 	AssignedUser string `json:"assigned_user"`
 	TTLMinutes   int    `json:"ttl_minutes"`
+	Reusable     bool   `json:"reusable"`  // if true, the token may enroll many machines
+	MaxUses      int    `json:"max_uses"`  // cap on reusable enrollments; <=0 means unlimited
 }
 
 type enrollTokenResp struct {
 	Token     string    `json:"token"`
 	ExpiresAt time.Time `json:"expires_at"`
+	Reusable  bool      `json:"reusable"`
+	MaxUses   int       `json:"max_uses"`
 }
 
 // handleCreateEnrollToken mints a one-time enrollment token (shown once).
@@ -37,13 +41,13 @@ func (a *App) handleCreateEnrollToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	expires := time.Now().Add(ttl)
-	if err := a.Store.CreateEnrollmentToken(r.Context(), auth.HashToken(tok), req.Group, req.AssignedUser, expires); err != nil {
+	if err := a.Store.CreateEnrollmentTokenEx(r.Context(), auth.HashToken(tok), req.Group, req.AssignedUser, expires, req.Reusable, req.MaxUses); err != nil {
 		writeErr(w, http.StatusInternalServerError, "store error")
 		return
 	}
 	_ = a.Store.Audit(r.Context(), currentUser(r).Email, "create_enroll_token", req.AssignedUser,
-		map[string]interface{}{"group": req.Group})
-	writeJSON(w, http.StatusOK, enrollTokenResp{Token: tok, ExpiresAt: expires})
+		map[string]interface{}{"group": req.Group, "reusable": req.Reusable, "max_uses": req.MaxUses})
+	writeJSON(w, http.StatusOK, enrollTokenResp{Token: tok, ExpiresAt: expires, Reusable: req.Reusable, MaxUses: req.MaxUses})
 }
 
 type consentReq struct {
