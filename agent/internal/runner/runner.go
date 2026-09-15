@@ -79,9 +79,13 @@ func Run(ctx context.Context, cfg *config.Config) error {
 	// Show the transparency indicator (see indicator_*.go).
 	showIndicator(pol.Active)
 
+	// Hand the machine id + effective policy to the user-session helper so it
+	// can capture screenshots/foreground with no server credentials of its own.
+	writeRuntime(cfg, machineID, pol)
+
 	collectorCtx, cancelCollectors := context.WithCancel(ctx)
 	if pol.Active {
-		startCollectors(collectorCtx, *pol, emit, emitBlob)
+		startCollectors(collectorCtx, *pol, RoleService, emit, emitBlob)
 	}
 
 	drainTicker := time.NewTicker(15 * time.Second)
@@ -114,22 +118,30 @@ func Run(ctx context.Context, cfg *config.Config) error {
 		case <-drainTicker.C:
 			drain(ctx, client, sp)
 		case <-hbTicker.C:
+			// Fold in the logged-in identity + consent the session helper
+			// reported, so the server attributes the machine and gates consent
+			// on the real employee.
+			ss := readSessionState(cfg)
 			_ = client.Heartbeat(ctx, wire.Heartbeat{
 				AgentVersion: Version, PolicyVersion: pol.Version,
 				QueuedEvents: sp.Count(), Healthy: true,
+				InteractiveUser: ss.InteractiveUser, Consented: ss.Consented,
 			})
 		case <-policyTicker.C:
 			newPol, err := client.GetPolicy(ctx)
 			if err != nil {
 				continue
 			}
+			// Always refresh the helper's handoff so a changed active state or
+			// policy (e.g. consent just recorded) reaches the session helper.
+			writeRuntime(cfg, machineID, newPol)
 			if newPol.Version != pol.Version || newPol.Active != pol.Active {
 				log.Printf("policy changed: v%d active=%v", newPol.Version, newPol.Active)
 				cancelCollectors()
 				collectorCtx, cancelCollectors = context.WithCancel(ctx)
 				showIndicator(newPol.Active)
 				if newPol.Active {
-					startCollectors(collectorCtx, *newPol, emit, emitBlob)
+					startCollectors(collectorCtx, *newPol, RoleService, emit, emitBlob)
 				}
 				pol = newPol
 			}
@@ -175,37 +187,53 @@ func downloadURL(ctx context.Context, url string) ([]byte, error) {
 	return io.ReadAll(io.LimitReader(res.Body, 200<<20))
 }
 
-func startCollectors(ctx context.Context, pol wire.Policy, emit collectors.Emit, emitBlob collectors.EmitBlob) {
+// Role selects which collectors a process runs. Screenshot and foreground need
+// the interactive user's desktop (RoleSession); the rest need SYSTEM/session 0
+// (RoleService). Splitting them is what lets every feature keep working when the
+// agent is deployed as a service plus a user-session helper.
+type Role int
+
+const (
+	RoleService Role = iota // SYSTEM service: privileged, session-0-safe collectors
+	RoleSession             // user-session helper: desktop-bound collectors
+)
+
+func startCollectors(ctx context.Context, pol wire.Policy, role Role, emit collectors.Emit, emitBlob collectors.EmitBlob) {
 	var active []collectors.Collector
-	if pol.Screenshot.Enabled {
-		active = append(active, screenshot.New(pol.Screenshot))
-	}
-	if pol.Foreground.Enabled {
-		active = append(active, foreground.New(pol.Foreground))
-	}
-	if pol.DNS.Enabled {
-		active = append(active, dns.New(pol.DNS, pol.Exclusions))
-	}
-	if pol.Netflow.Enabled {
-		active = append(active, netflow.New(pol.Netflow))
-	}
-	if pol.Fswatch.Enabled {
-		active = append(active, fswatch.New(pol.Fswatch))
-	}
-	if pol.USB.Enabled {
-		active = append(active, usb.New(pol.USB))
-	}
-	if pol.PrintJobs.Enabled {
-		active = append(active, printjobs.New(pol.PrintJobs))
-	}
-	if pol.Installs.Enabled {
-		active = append(active, installs.New(pol.Installs))
-	}
-	if pol.Posture.Enabled {
-		active = append(active, posture.New(pol.Posture))
-	}
-	if pol.Seclog.Enabled {
-		active = append(active, seclog.New(pol.Seclog))
+	if role == RoleSession {
+		// Desktop-bound: only meaningful inside the logged-in user's session.
+		if pol.Screenshot.Enabled {
+			active = append(active, screenshot.New(pol.Screenshot))
+		}
+		if pol.Foreground.Enabled {
+			active = append(active, foreground.New(pol.Foreground))
+		}
+	} else {
+		// Privileged: ETW/WMI/event-log collectors that require SYSTEM.
+		if pol.DNS.Enabled {
+			active = append(active, dns.New(pol.DNS, pol.Exclusions))
+		}
+		if pol.Netflow.Enabled {
+			active = append(active, netflow.New(pol.Netflow))
+		}
+		if pol.Fswatch.Enabled {
+			active = append(active, fswatch.New(pol.Fswatch))
+		}
+		if pol.USB.Enabled {
+			active = append(active, usb.New(pol.USB))
+		}
+		if pol.PrintJobs.Enabled {
+			active = append(active, printjobs.New(pol.PrintJobs))
+		}
+		if pol.Installs.Enabled {
+			active = append(active, installs.New(pol.Installs))
+		}
+		if pol.Posture.Enabled {
+			active = append(active, posture.New(pol.Posture))
+		}
+		if pol.Seclog.Enabled {
+			active = append(active, seclog.New(pol.Seclog))
+		}
 	}
 	for _, c := range active {
 		c := c

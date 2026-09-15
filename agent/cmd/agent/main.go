@@ -23,6 +23,7 @@ func main() {
 
 	cfgPath := flag.String("config", defaultConfigPath(), "path to agent config JSON")
 	console := flag.Bool("console", false, "force console (foreground) mode")
+	sessionAgent := flag.Bool("session-agent", false, "run the user-session helper (screenshots + foreground app) instead of the service; launched per-user at logon")
 	flag.Parse()
 
 	cfg, err := config.Load(*cfgPath)
@@ -32,6 +33,15 @@ func main() {
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
+
+	// The user-session helper runs in the logged-in user's session (not as a
+	// service) and does the desktop-bound collection.
+	if *sessionAgent {
+		if err := runner.RunSessionAgent(ctx, cfg); err != nil {
+			log.Fatalf("session agent: %v", err)
+		}
+		return
+	}
 
 	if err := platformRun(ctx, cfg, *console); err != nil {
 		log.Fatalf("agent: %v", err)

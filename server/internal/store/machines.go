@@ -80,6 +80,15 @@ func (s *Store) TouchMachine(ctx context.Context, id, agentVersion string) error
 	return err
 }
 
+// SetMachineAssignedUser attributes a machine to a real interactive user. Used
+// when the session helper reports the logged-in identity, so per-person
+// attribution and the consent gate track the actual employee.
+func (s *Store) SetMachineAssignedUser(ctx context.Context, id, assignedUser string) error {
+	_, err := s.Pool.Exec(ctx,
+		`UPDATE machines SET assigned_user=$2 WHERE id=$1`, id, nullify(assignedUser))
+	return err
+}
+
 // --- Enrollment tokens ---
 
 // CreateEnrollmentToken stores a hashed one-time token.

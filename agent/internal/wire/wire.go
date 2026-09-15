@@ -107,4 +107,26 @@ type Heartbeat struct {
 	PolicyVersion int    `json:"policy_version"`
 	QueuedEvents  int    `json:"queued_events"`
 	Healthy       bool   `json:"healthy"`
+	// InteractiveUser and Consented carry the logged-in identity and consent
+	// state observed by the user-session helper (via the session handoff file).
+	InteractiveUser string `json:"interactive_user,omitempty"`
+	Consented       bool   `json:"consented,omitempty"`
+}
+
+// SessionState is the handoff file the user-session helper writes into the
+// spool dir and the service reads: who is logged in and whether they accepted
+// the monitoring notice. Kept in the (user-writable) spool so the unprivileged
+// helper needs no access to the service's private data dir / certificates.
+type SessionState struct {
+	InteractiveUser string `json:"interactive_user"`
+	Consented       bool   `json:"consented"`
+	UpdatedAt       string `json:"updated_at"`
+}
+
+// Runtime is the handoff file the service writes into the spool dir for the
+// helper: the machine id (so blob object keys are namespaced identically) and
+// the current effective policy (so the helper needs no server credentials).
+type Runtime struct {
+	MachineID string `json:"machine_id"`
+	Policy    Policy `json:"policy"`
 }

@@ -135,5 +135,20 @@ func (a *App) handleHeartbeat(w http.ResponseWriter, r *http.Request) {
 	var hb model.Heartbeat
 	_ = json.NewDecoder(io.LimitReader(r.Body, 1<<20)).Decode(&hb)
 	_ = a.Store.TouchMachine(r.Context(), m.ID, hb.AgentVersion)
+
+	// Attribute the machine to the real logged-in user reported by the session
+	// helper, so per-person data and the consent gate track the actual employee.
+	if hb.InteractiveUser != "" && hb.InteractiveUser != m.AssignedUser {
+		if err := a.Store.SetMachineAssignedUser(r.Context(), m.ID, hb.InteractiveUser); err == nil {
+			m.AssignedUser = hb.InteractiveUser
+		}
+	}
+	// Record the user's in-session acceptance of the monitoring notice. This is
+	// the consent gate EffectivePolicy checks before activating collection.
+	if hb.Consented && hb.InteractiveUser != "" {
+		if ok, _ := a.Store.HasConsent(r.Context(), hb.InteractiveUser); !ok {
+			_ = a.Store.RecordConsent(r.Context(), hb.InteractiveUser, m.ID, "agent-clickthrough", hb.PolicyVersion)
+		}
+	}
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }

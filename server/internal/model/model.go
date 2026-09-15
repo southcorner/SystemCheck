@@ -135,6 +135,11 @@ type Heartbeat struct {
 	PolicyVersion int    `json:"policy_version"`
 	QueuedEvents  int    `json:"queued_events"`
 	Healthy       bool   `json:"healthy"`
+	// InteractiveUser is the logged-in Windows user the session helper observed
+	// (e.g. "DOMAIN\\alice"); the server attributes the machine to this person.
+	InteractiveUser string `json:"interactive_user,omitempty"`
+	// Consented reports that the user accepted the monitoring notice in-session.
+	Consented bool `json:"consented,omitempty"`
 }
 
 // DefaultPolicy returns a conservative, privacy-first default policy that is
