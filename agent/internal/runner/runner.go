@@ -201,12 +201,18 @@ const (
 func startCollectors(ctx context.Context, pol wire.Policy, role Role, emit collectors.Emit, emitBlob collectors.EmitBlob) {
 	var active []collectors.Collector
 	if role == RoleSession {
-		// Desktop-bound: only meaningful inside the logged-in user's session.
+		// Desktop/user-scoped: only meaningful inside the logged-in user's
+		// session (screenshots, foreground app, and file watch - the latter
+		// watches %USERPROFILE%\Downloads + browser history, which resolve to
+		// the real user only when running as that user, not as SYSTEM).
 		if pol.Screenshot.Enabled {
 			active = append(active, screenshot.New(pol.Screenshot))
 		}
 		if pol.Foreground.Enabled {
 			active = append(active, foreground.New(pol.Foreground))
+		}
+		if pol.Fswatch.Enabled {
+			active = append(active, fswatch.New(pol.Fswatch))
 		}
 	} else {
 		// Privileged: ETW/WMI/event-log collectors that require SYSTEM.
@@ -215,9 +221,6 @@ func startCollectors(ctx context.Context, pol wire.Policy, role Role, emit colle
 		}
 		if pol.Netflow.Enabled {
 			active = append(active, netflow.New(pol.Netflow))
-		}
-		if pol.Fswatch.Enabled {
-			active = append(active, fswatch.New(pol.Fswatch))
 		}
 		if pol.USB.Enabled {
 			active = append(active, usb.New(pol.USB))

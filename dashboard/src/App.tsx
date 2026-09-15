@@ -546,7 +546,7 @@ function DomainsTab({ id }: { id: string }) {
   useEffect(() => {
     api.domains(id).then(setRows).catch(() => setRows([]));
   }, [id]);
-  if (rows.length === 0) return <p className="muted">No domains recorded (enable DNS in policy).</p>;
+  if (rows.length === 0) return <p className="muted">No domains recorded yet.</p>;
   return (
     <table>
       <thead>
@@ -574,7 +574,7 @@ function TransfersTab({ id }: { id: string }) {
   useEffect(() => {
     api.transfers(id).then(setRows).catch(() => setRows([]));
   }, [id]);
-  if (rows.length === 0) return <p className="muted">No transfer data (enable netflow in policy).</p>;
+  if (rows.length === 0) return <p className="muted">No transfer data yet.</p>;
   return (
     <table>
       <thead>
@@ -602,7 +602,7 @@ function DownloadsTab({ id }: { id: string }) {
   useEffect(() => {
     api.downloads(id).then(setRows).catch(() => setRows([]));
   }, [id]);
-  if (rows.length === 0) return <p className="muted">No downloads recorded (enable file watch in policy).</p>;
+  if (rows.length === 0) return <p className="muted">No downloads recorded yet.</p>;
   return (
     <table>
       <thead>
@@ -650,7 +650,7 @@ function SecurityTab({ id }: { id: string }) {
     <div>
       <section>
         <h3>Device posture</h3>
-        {!latest && <p className="muted">No posture snapshot (enable posture in policy).</p>}
+        {!latest && <p className="muted">No posture snapshot yet.</p>}
         {latest && (
           <div className="posture">
             <Badge ok={!!latest.bitlocker && latest.bitlocker !== "Off"} label={`Encryption: ${latest.bitlocker ?? "?"}`} />
