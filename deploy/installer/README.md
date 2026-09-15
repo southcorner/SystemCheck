@@ -15,10 +15,13 @@ desktop, while the ETW/WMI/event-log collectors need SYSTEM. The two parts hand
 off through small files in the (user-writable) `spool` dir — the helper holds no
 server credentials.
 
-## Install (per machine, as Administrator)
+## Install (per machine)
 
-Copy the zip contents to the machine and run:
+**One-click:** extract the zip, then **right-click `install.bat` → Run as
+administrator** (it self-elevates, so a double-click works too). The server URL
+and enrollment token are baked into `install.bat` at packaging time — no typing.
 
+**Or from an Administrator PowerShell:**
 ```powershell
 .\install.ps1 -ServerUrl https://<server>:8443 -EnrollToken <reusable-token>
 ```
