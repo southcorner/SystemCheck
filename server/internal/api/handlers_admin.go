@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"net/http"
 	"strconv"
 	"time"
@@ -110,6 +111,49 @@ func (a *App) handleScreenshotImage(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", ct)
 	w.Header().Set("Cache-Control", "private, no-store")
 	_, _ = w.Write(data)
+}
+
+// handleDeleteScreenshot deletes one screenshot (metadata row + blob). Admin.
+func (a *App) handleDeleteScreenshot(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	machineID, objectKey, err := a.Store.DeleteScreenshot(r.Context(), id)
+	if err != nil {
+		writeErr(w, http.StatusNotFound, "not found")
+		return
+	}
+	if err := a.Blob.Delete(objectKey); err != nil {
+		a.Log.Printf("delete screenshot blob %s: %v", objectKey, err)
+	}
+	_ = a.Store.Audit(r.Context(), currentUser(r).Email, "delete_screenshot", machineID,
+		map[string]interface{}{"screenshot_id": id})
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "deleted": 1})
+}
+
+type bulkDeleteReq struct {
+	IDs []string `json:"ids"`
+}
+
+// handleBulkDeleteScreenshots deletes several screenshots in one request. Admin.
+func (a *App) handleBulkDeleteScreenshots(w http.ResponseWriter, r *http.Request) {
+	var req bulkDeleteReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || len(req.IDs) == 0 {
+		writeErr(w, http.StatusBadRequest, "ids required")
+		return
+	}
+	deleted := 0
+	for _, id := range req.IDs {
+		_, objectKey, err := a.Store.DeleteScreenshot(r.Context(), id)
+		if err != nil {
+			continue
+		}
+		if err := a.Blob.Delete(objectKey); err != nil {
+			a.Log.Printf("delete screenshot blob %s: %v", objectKey, err)
+		}
+		deleted++
+	}
+	_ = a.Store.Audit(r.Context(), currentUser(r).Email, "delete_screenshots_bulk", "",
+		map[string]interface{}{"requested": len(req.IDs), "deleted": deleted})
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "deleted": deleted})
 }
 
 // approvedToView reports whether the current user may view screenshots for the

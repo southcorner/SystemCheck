@@ -66,6 +66,8 @@ func (a *App) Router() http.Handler {
 	mux.Handle("GET /api/machines/{id}/transfers", a.adminAuth(true, http.HandlerFunc(a.handleMachineTransfers)))
 	mux.Handle("GET /api/machines/{id}/downloads", a.adminAuth(true, http.HandlerFunc(a.handleMachineDownloads)))
 	mux.Handle("GET /api/screenshots/{id}/image", a.adminAuth(true, http.HandlerFunc(a.handleScreenshotImage)))
+	mux.Handle("DELETE /api/screenshots/{id}", a.adminAuth(true, a.requireRole("admin", "", http.HandlerFunc(a.handleDeleteScreenshot))))
+	mux.Handle("POST /api/screenshots/delete", a.adminAuth(true, a.requireRole("admin", "", http.HandlerFunc(a.handleBulkDeleteScreenshots))))
 	mux.Handle("GET /api/audit", a.adminAuth(true, a.requireRole("admin", "auditor", http.HandlerFunc(a.handleAudit))))
 
 	// Alerts.

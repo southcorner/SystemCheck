@@ -141,6 +141,13 @@ export const api = {
   ackAlert: (id: string) =>
     req<{ ok: boolean }>(`/api/alerts/${id}/ack`, { method: "POST" }),
   imageURL: (screenshotID: string) => `/api/screenshots/${screenshotID}/image`,
+  deleteScreenshot: (id: string) =>
+    req<{ ok: boolean; deleted: number }>(`/api/screenshots/${id}`, { method: "DELETE" }),
+  deleteScreenshots: (ids: string[]) =>
+    req<{ ok: boolean; deleted: number }>(`/api/screenshots/delete`, {
+      method: "POST",
+      body: JSON.stringify({ ids }),
+    }),
 
   // User management (admin only).
   users: () => reqList<AdminUser>("/api/users"),

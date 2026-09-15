@@ -96,6 +96,18 @@ func (s *Store) ScreenshotByID(ctx context.Context, id string) (machineID, objec
 	return
 }
 
+// DeleteScreenshot removes one screenshot metadata row and returns its machine
+// id and object key so the caller can delete the underlying blob.
+func (s *Store) DeleteScreenshot(ctx context.Context, id string) (machineID, objectKey string, err error) {
+	err = s.Pool.QueryRow(ctx,
+		`DELETE FROM screenshots WHERE id=$1 RETURNING machine_id, object_key`, id,
+	).Scan(&machineID, &objectKey)
+	if err != nil {
+		err = noRows(err)
+	}
+	return
+}
+
 // AppUsageRow is a rolled-up per-process active-time entry.
 type AppUsageRow struct {
 	Process   string `json:"process"`

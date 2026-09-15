@@ -390,12 +390,15 @@ function ScreenshotsTab({ id }: { id: string }) {
   const [shots, setShots] = useState<ScreenshotMeta[]>([]);
   const [needApproval, setNeedApproval] = useState(false);
   const [requested, setRequested] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [busy, setBusy] = useState(false);
 
   const load = () => {
     api
       .screenshots(id)
       .then((s) => {
         setShots(s);
+        setSelected(new Set());
         setNeedApproval(false);
       })
       .catch((err) => {
@@ -404,6 +407,35 @@ function ScreenshotsTab({ id }: { id: string }) {
       });
   };
   useEffect(load, [id]);
+
+  const toggle = (sid: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      next.has(sid) ? next.delete(sid) : next.add(sid);
+      return next;
+    });
+  };
+  const deleteOne = async (sid: string) => {
+    if (!confirm("Delete this screenshot permanently?")) return;
+    setBusy(true);
+    try {
+      await api.deleteScreenshot(sid);
+      load();
+    } finally {
+      setBusy(false);
+    }
+  };
+  const deleteSelected = async () => {
+    if (selected.size === 0) return;
+    if (!confirm(`Delete ${selected.size} screenshot(s) permanently?`)) return;
+    setBusy(true);
+    try {
+      await api.deleteScreenshots([...selected]);
+      load();
+    } finally {
+      setBusy(false);
+    }
+  };
 
   if (needApproval) {
     return (
@@ -432,14 +464,54 @@ function ScreenshotsTab({ id }: { id: string }) {
   }
 
   if (shots.length === 0) return <p className="muted">No screenshots in range.</p>;
+  const allSelected = selected.size === shots.length && shots.length > 0;
   return (
-    <div className="grid">
-      {shots.map((s) => (
-        <figure key={s.id}>
-          <img src={api.imageURL(s.id)} alt={s.ts} loading="lazy" />
-          <figcaption className="small">{new Date(s.ts).toLocaleString()}</figcaption>
-        </figure>
-      ))}
+    <div>
+      <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 10, flexWrap: "wrap" }}>
+        <label style={{ display: "flex", gap: 6, alignItems: "center" }}>
+          <input
+            type="checkbox"
+            checked={allSelected}
+            onChange={(e) => setSelected(e.target.checked ? new Set(shots.map((s) => s.id)) : new Set())}
+          />
+          Select all ({shots.length})
+        </label>
+        <button
+          onClick={deleteSelected}
+          disabled={selected.size === 0 || busy}
+          style={{ color: selected.size ? "#b91c1c" : undefined }}
+        >
+          Delete selected{selected.size ? ` (${selected.size})` : ""}
+        </button>
+        {busy && <span className="muted small">working…</span>}
+      </div>
+      <div className="grid">
+        {shots.map((s) => (
+          <figure key={s.id} style={{ position: "relative", outline: selected.has(s.id) ? "2px solid #3b82f6" : "none" }}>
+            <input
+              type="checkbox"
+              checked={selected.has(s.id)}
+              onChange={() => toggle(s.id)}
+              title="Select"
+              style={{ position: "absolute", top: 6, left: 6, width: 18, height: 18, zIndex: 1 }}
+            />
+            <button
+              onClick={() => deleteOne(s.id)}
+              disabled={busy}
+              title="Delete this screenshot"
+              style={{
+                position: "absolute", top: 4, right: 4, zIndex: 1,
+                border: "none", borderRadius: 4, cursor: "pointer",
+                background: "rgba(0,0,0,0.6)", color: "#fff", lineHeight: 1, padding: "2px 6px",
+              }}
+            >
+              ✕
+            </button>
+            <img src={api.imageURL(s.id)} alt={s.ts} loading="lazy" />
+            <figcaption className="small">{new Date(s.ts).toLocaleString()}</figcaption>
+          </figure>
+        ))}
+      </div>
     </div>
   );
 }
