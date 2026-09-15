@@ -81,6 +81,52 @@ type upsertPolicyReq struct {
 	Policy model.Policy `json:"policy"`
 }
 
+type groupPolicyResp struct {
+	Group   string       `json:"group"`
+	Version int          `json:"version"`
+	Policy  model.Policy `json:"policy"`
+}
+
+// handleGetPolicy returns the policy currently applied to a group (or the
+// built-in default) for the Settings UI to edit. Group defaults to "default".
+func (a *App) handleGetPolicy(w http.ResponseWriter, r *http.Request) {
+	group := r.URL.Query().Get("group")
+	if group == "" {
+		group = "default"
+	}
+	pol, version, err := a.Store.GetGroupPolicy(r.Context(), group)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "store error")
+		return
+	}
+	writeJSON(w, http.StatusOK, groupPolicyResp{Group: group, Version: version, Policy: pol})
+}
+
+type setPolicyReq struct {
+	Group  string       `json:"group"`
+	Policy model.Policy `json:"policy"`
+}
+
+// handleSetPolicy stores and assigns a group's policy from the Settings UI.
+func (a *App) handleSetPolicy(w http.ResponseWriter, r *http.Request) {
+	var req setPolicyReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, "bad request")
+		return
+	}
+	if req.Group == "" {
+		req.Group = "default"
+	}
+	version, err := a.Store.SetGroupPolicy(r.Context(), req.Group, req.Policy)
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "store error")
+		return
+	}
+	_ = a.Store.Audit(r.Context(), currentUser(r).Email, "policy_set", req.Group,
+		map[string]interface{}{"group": req.Group, "version": version})
+	writeJSON(w, http.StatusOK, groupPolicyResp{Group: req.Group, Version: version, Policy: req.Policy})
+}
+
 // handleUpsertPolicy stores a new policy version.
 func (a *App) handleUpsertPolicy(w http.ResponseWriter, r *http.Request) {
 	var req upsertPolicyReq

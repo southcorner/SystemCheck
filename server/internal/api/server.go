@@ -89,6 +89,8 @@ func (a *App) Router() http.Handler {
 	mux.Handle("POST /api/enroll-tokens", a.adminAuth(true, a.requireRole("admin", "", http.HandlerFunc(a.handleCreateEnrollToken))))
 	mux.Handle("POST /api/consent", a.adminAuth(true, a.requireRole("admin", "", http.HandlerFunc(a.handleRecordConsent))))
 	mux.Handle("POST /api/policies", a.adminAuth(true, a.requireRole("admin", "", http.HandlerFunc(a.handleUpsertPolicy))))
+	mux.Handle("GET /api/policy", a.adminAuth(true, http.HandlerFunc(a.handleGetPolicy)))
+	mux.Handle("PUT /api/policy", a.adminAuth(true, a.requireRole("admin", "", http.HandlerFunc(a.handleSetPolicy))))
 
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok")) })
 
