@@ -1,14 +1,19 @@
-# Removes the SystemCheck agent service. Run as Administrator.
+# Removes the SystemCheck agent (service, session-helper task, files). Admin.
 param(
     [string]$InstallDir = "$env:ProgramFiles\SystemCheck",
-    [switch]$PurgeData
+    [string]$DataDir    = "$env:ProgramData\SystemCheck",
+    [switch]$KeepData
 )
-$ErrorActionPreference = "Stop"
+$ErrorActionPreference = "SilentlyContinue"
 $ServiceName = "SystemCheckAgent"
-if (Get-Service $ServiceName -ErrorAction SilentlyContinue) {
-    Stop-Service $ServiceName -Force -ErrorAction SilentlyContinue
+$TaskName    = "SystemCheckAgentSession"
+
+if (Get-ScheduledTask -TaskName $TaskName) { Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false }
+if (Get-Service $ServiceName) {
+    Stop-Service $ServiceName -Force
     sc.exe delete $ServiceName | Out-Null
 }
-Remove-Item -Recurse -Force $InstallDir -ErrorAction SilentlyContinue
-if ($PurgeData) { Remove-Item -Recurse -Force "$env:ProgramData\SystemCheck" -ErrorAction SilentlyContinue }
-Write-Host "SystemCheck agent removed."
+Start-Sleep -Seconds 1
+Remove-Item -Recurse -Force $InstallDir
+if (-not $KeepData) { Remove-Item -Recurse -Force $DataDir }
+Write-Host "SystemCheck removed."
