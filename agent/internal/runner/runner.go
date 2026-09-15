@@ -32,7 +32,7 @@ import (
 
 // Version is the agent version string. Bump on agent changes so the dashboard
 // shows which machines have picked up an update.
-const Version = "0.2.0"
+const Version = "0.3.0"
 
 // Run executes the agent until ctx is cancelled.
 func Run(ctx context.Context, cfg *config.Config) error {

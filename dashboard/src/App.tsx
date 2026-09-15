@@ -609,18 +609,18 @@ function DownloadsTab({ id }: { id: string }) {
         <tr>
           <th className="left">File</th>
           <th className="right">Size</th>
-          <th className="left">Source</th>
+          <th className="left">From (domain)</th>
           <th className="right">When</th>
         </tr>
       </thead>
       <tbody>
         {rows.map((d, i) => (
           <tr key={d.path + i}>
-            <td className="mono" title={d.url || d.path}>
+            <td className="mono" title={d.path}>
               {d.name}
             </td>
             <td className="right">{formatBytes(d.size)}</td>
-            <td className="small">{d.source}</td>
+            <td className="small" title={d.url}>{d.domain || "—"}</td>
             <td className="right small">{new Date(d.ts).toLocaleString()}</td>
           </tr>
         ))}

@@ -33,6 +33,7 @@ export type DownloadRow = {
   path: string;
   size: number;
   url: string;
+  domain: string;
   source: string;
 };
 export type EventRow = { ts: string; kind: string; data: Record<string, any> };

@@ -1,14 +1,18 @@
-// Package fswatch watches configured folders (default the user's Downloads) and
-// emits a "download" event with the file name and size once a new/changed file
-// settles. It uses fsnotify, which is cross-platform, so this collector is real
-// on every platform. Browser download-history enrichment is platform-specific
-// (see history_windows.go / history_other.go).
+// Package fswatch detects files DOWNLOADED FROM THE INTERNET, independent of
+// which browser, browser profile, or download folder the user chose. It watches
+// the user's file tree (profile + removable drives, plus any policy folders) and
+// records a file only when it carries an internet "Mark of the Web"
+// (Zone.Identifier ADS with ZoneId >= 3) - the tag Windows/SmartScreen attaches
+// to internet downloads from every mainstream browser. That yields the file
+// name, size, path and source domain regardless of the app that fetched it.
 package fswatch
 
 import (
 	"context"
 	"log"
+	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -19,11 +23,15 @@ import (
 	"github.com/southcorner/systemcheck/agent/internal/wire"
 )
 
-// settleDelay is how long a file must be quiet before we record it, so we don't
-// capture a half-written download.
+// settleDelay is how long a file must be quiet before we inspect it, so the
+// download (and its Zone.Identifier stream, written last) has finished.
 const settleDelay = 2 * time.Second
 
-// Collector watches folders for new/changed files.
+// maxWatchedDirs caps how many directories we register, so watching a large
+// profile tree can't exhaust handles on a busy machine.
+const maxWatchedDirs = 6000
+
+// Collector watches for downloaded files.
 type Collector struct {
 	pol wire.FswatchPolicy
 }
@@ -34,7 +42,7 @@ func New(pol wire.FswatchPolicy) *Collector { return &Collector{pol: pol} }
 // Name implements collectors.Collector.
 func (c *Collector) Name() string { return "fswatch" }
 
-// Start watches the policy folders until ctx is cancelled.
+// Start watches the roots until ctx is cancelled.
 func (c *Collector) Start(ctx context.Context, emit collectors.Emit, _ collectors.EmitBlob) error {
 	w, err := fsnotify.NewWatcher()
 	if err != nil {
@@ -42,25 +50,22 @@ func (c *Collector) Start(ctx context.Context, emit collectors.Emit, _ collector
 	}
 	defer w.Close()
 
+	// Roots: user profile + removable drives (platform-derived) plus any
+	// explicit folders configured in policy.
+	roots := defaultRoots()
 	for _, f := range c.pol.Folders {
-		p := expandPath(f)
-		if p == "" {
-			continue
+		if p := expandPath(f); p != "" {
+			roots = append(roots, p)
 		}
-		if err := w.Add(p); err != nil {
-			log.Printf("fswatch: cannot watch %q: %v", p, err)
-			continue
-		}
-		log.Printf("fswatch: watching %s", p)
 	}
+	watched := &dirCounter{}
+	for _, r := range roots {
+		addTree(w, r, watched)
+	}
+	log.Printf("fswatch: watching %d directories under %v (internet-download detection)", watched.n, roots)
 
 	var mu sync.Mutex
 	timers := map[string]*time.Timer{}
-
-	// Optional browser history enrichment on a slow poll.
-	if c.pol.IncludeBrowserHistory {
-		go c.browserHistoryLoop(ctx, emit)
-	}
 
 	for {
 		select {
@@ -69,6 +74,13 @@ func (c *Collector) Start(ctx context.Context, emit collectors.Emit, _ collector
 		case event, ok := <-w.Events:
 			if !ok {
 				return nil
+			}
+			// New directory (e.g. a freshly created download subfolder): watch it too.
+			if event.Op&fsnotify.Create != 0 {
+				if fi, statErr := os.Stat(event.Name); statErr == nil && fi.IsDir() {
+					addTree(w, event.Name, watched)
+					continue
+				}
 			}
 			if event.Op&(fsnotify.Create|fsnotify.Write) == 0 {
 				continue
@@ -85,7 +97,7 @@ func (c *Collector) Start(ctx context.Context, emit collectors.Emit, _ collector
 					mu.Lock()
 					delete(timers, path)
 					mu.Unlock()
-					emitFile(emit, path)
+					maybeEmitDownload(emit, path)
 				})
 			}
 			mu.Unlock()
@@ -98,24 +110,43 @@ func (c *Collector) Start(ctx context.Context, emit collectors.Emit, _ collector
 	}
 }
 
-func (c *Collector) browserHistoryLoop(ctx context.Context, emit collectors.Emit) {
-	ticker := time.NewTicker(5 * time.Minute)
-	defer ticker.Stop()
-	scanBrowserHistory(emit) // once at startup
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			scanBrowserHistory(emit)
+type dirCounter struct{ n int }
+
+// addTree registers dir and its subdirectories with the watcher, skipping
+// high-churn/system trees and honouring the watch cap. Best-effort.
+func addTree(w *fsnotify.Watcher, root string, c *dirCounter) {
+	_ = filepath.WalkDir(root, func(p string, d os.DirEntry, err error) error {
+		if err != nil {
+			return nil // unreadable entry: skip, keep walking
 		}
-	}
+		if !d.IsDir() {
+			return nil
+		}
+		if excludeDir(p) {
+			return filepath.SkipDir
+		}
+		if c.n >= maxWatchedDirs {
+			return filepath.SkipDir
+		}
+		if w.Add(p) == nil {
+			c.n++
+		}
+		return nil
+	})
 }
 
-func emitFile(emit collectors.Emit, path string) {
+// maybeEmitDownload records a settled file only if it is an internet download.
+func maybeEmitDownload(emit collectors.Emit, path string) {
 	fi, err := os.Stat(path)
 	if err != nil || fi.IsDir() || fi.Size() == 0 {
 		return
+	}
+	src, ok := isInternetDownload(path)
+	if !ok {
+		return // ordinary file activity, not an internet download - ignore
+	}
+	if !markEmitted(path, fi.ModTime()) {
+		return // already recorded this version of the file
 	}
 	emit(wire.Event{
 		Kind: "download",
@@ -124,10 +155,39 @@ func emitFile(emit collectors.Emit, path string) {
 			"name":   fi.Name(),
 			"path":   path,
 			"size":   fi.Size(),
-			"folder": parentDir(path),
-			"source": "filesystem",
+			"folder": filepath.Dir(path),
+			"url":    src,
+			"domain": domainOf(src),
+			"source": "motw",
 		},
 	})
+}
+
+// Dedup so a file isn't reported repeatedly as it is written.
+var (
+	emitMu  sync.Mutex
+	emitted = map[string]int64{}
+)
+
+func markEmitted(path string, mod time.Time) bool {
+	emitMu.Lock()
+	defer emitMu.Unlock()
+	m := mod.UnixNano()
+	if emitted[path] == m {
+		return false
+	}
+	emitted[path] = m
+	return true
+}
+
+func domainOf(raw string) string {
+	if raw == "" {
+		return ""
+	}
+	if u, err := url.Parse(raw); err == nil {
+		return u.Hostname()
+	}
+	return ""
 }
 
 // isTempDownload skips partial-download temp files created by browsers.

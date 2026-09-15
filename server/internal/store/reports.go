@@ -76,6 +76,7 @@ type DownloadRow struct {
 	Path   string    `json:"path"`
 	Size   int64     `json:"size"`
 	URL    string    `json:"url"`
+	Domain string    `json:"domain"`
 	Source string    `json:"source"`
 }
 
@@ -87,6 +88,7 @@ func (s *Store) Downloads(ctx context.Context, machineID string, from, to time.T
 		        coalesce(data->>'path','') AS path,
 		        coalesce((data->>'size')::bigint,0) AS size,
 		        coalesce(data->>'url','') AS url,
+		        coalesce(data->>'domain','') AS domain,
 		        coalesce(data->>'source','') AS source
 		   FROM events
 		  WHERE machine_id=$1 AND kind='download' AND ts BETWEEN $2 AND $3
@@ -99,7 +101,7 @@ func (s *Store) Downloads(ctx context.Context, machineID string, from, to time.T
 	var out []DownloadRow
 	for rows.Next() {
 		var r DownloadRow
-		if err := rows.Scan(&r.TS, &r.Name, &r.Path, &r.Size, &r.URL, &r.Source); err != nil {
+		if err := rows.Scan(&r.TS, &r.Name, &r.Path, &r.Size, &r.URL, &r.Domain, &r.Source); err != nil {
 			return nil, err
 		}
 		out = append(out, r)
