@@ -10,6 +10,7 @@ export type Machine = {
   last_seen: string | null;
   agent_version: string;
   active: boolean;
+  nickname: string;
 };
 
 export type ScreenshotMeta = {
@@ -128,6 +129,11 @@ export const api = {
   me: () => req<{ email: string; role: string; mfa_enabled: boolean }>("/api/me"),
   logout: () => req<{ ok: boolean }>("/api/logout", { method: "POST" }),
   machines: () => reqList<Machine>("/api/machines"),
+  setNickname: (id: string, nickname: string) =>
+    req<{ ok: boolean }>(`/api/machines/${id}/nickname`, {
+      method: "POST",
+      body: JSON.stringify({ nickname }),
+    }),
   screenshots: (id: string) =>
     reqList<ScreenshotMeta>(`/api/machines/${id}/screenshots`),
   apps: (id: string) => reqList<AppUsage>(`/api/machines/${id}/apps`),

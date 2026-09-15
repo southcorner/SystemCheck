@@ -16,6 +16,7 @@ type Machine struct {
 	LastSeen     *time.Time `json:"last_seen"`
 	AgentVersion string     `json:"agent_version"`
 	Active       bool       `json:"active"`
+	Nickname     string     `json:"nickname"`
 }
 
 // CreateMachine inserts a machine at enrollment time and returns its id.
@@ -32,21 +33,21 @@ func (s *Store) CreateMachine(ctx context.Context, hostname, os, osVersion, agen
 // GetMachineByFingerprint resolves a machine by its client-cert fingerprint.
 func (s *Store) GetMachineByFingerprint(ctx context.Context, fingerprint string) (*Machine, error) {
 	return s.scanMachine(ctx,
-		`SELECT id, hostname, os, coalesce(os_version,''), coalesce(assigned_user,''), coalesce("group",''), last_seen, coalesce(agent_version,''), active
+		`SELECT id, hostname, os, coalesce(os_version,''), coalesce(assigned_user,''), coalesce("group",''), last_seen, coalesce(agent_version,''), active, coalesce(nickname,'')
 		   FROM machines WHERE cert_fingerprint=$1`, fingerprint)
 }
 
 // GetMachine resolves a machine by id.
 func (s *Store) GetMachine(ctx context.Context, id string) (*Machine, error) {
 	return s.scanMachine(ctx,
-		`SELECT id, hostname, os, coalesce(os_version,''), coalesce(assigned_user,''), coalesce("group",''), last_seen, coalesce(agent_version,''), active
+		`SELECT id, hostname, os, coalesce(os_version,''), coalesce(assigned_user,''), coalesce("group",''), last_seen, coalesce(agent_version,''), active, coalesce(nickname,'')
 		   FROM machines WHERE id=$1`, id)
 }
 
 func (s *Store) scanMachine(ctx context.Context, q string, args ...any) (*Machine, error) {
 	m := &Machine{}
 	err := s.Pool.QueryRow(ctx, q, args...).Scan(
-		&m.ID, &m.Hostname, &m.OS, &m.OSVersion, &m.AssignedUser, &m.Group, &m.LastSeen, &m.AgentVersion, &m.Active)
+		&m.ID, &m.Hostname, &m.OS, &m.OSVersion, &m.AssignedUser, &m.Group, &m.LastSeen, &m.AgentVersion, &m.Active, &m.Nickname)
 	if err != nil {
 		return nil, noRows(err)
 	}
@@ -56,7 +57,7 @@ func (s *Store) scanMachine(ctx context.Context, q string, args ...any) (*Machin
 // ListMachines returns all machines, most-recently-seen first.
 func (s *Store) ListMachines(ctx context.Context) ([]Machine, error) {
 	rows, err := s.Pool.Query(ctx,
-		`SELECT id, hostname, os, coalesce(os_version,''), coalesce(assigned_user,''), coalesce("group",''), last_seen, coalesce(agent_version,''), active
+		`SELECT id, hostname, os, coalesce(os_version,''), coalesce(assigned_user,''), coalesce("group",''), last_seen, coalesce(agent_version,''), active, coalesce(nickname,'')
 		   FROM machines ORDER BY last_seen DESC NULLS LAST`)
 	if err != nil {
 		return nil, err
@@ -65,12 +66,19 @@ func (s *Store) ListMachines(ctx context.Context) ([]Machine, error) {
 	var out []Machine
 	for rows.Next() {
 		var m Machine
-		if err := rows.Scan(&m.ID, &m.Hostname, &m.OS, &m.OSVersion, &m.AssignedUser, &m.Group, &m.LastSeen, &m.AgentVersion, &m.Active); err != nil {
+		if err := rows.Scan(&m.ID, &m.Hostname, &m.OS, &m.OSVersion, &m.AssignedUser, &m.Group, &m.LastSeen, &m.AgentVersion, &m.Active, &m.Nickname); err != nil {
 			return nil, err
 		}
 		out = append(out, m)
 	}
 	return out, rows.Err()
+}
+
+// SetMachineNickname sets (or clears) the human-friendly label for a machine.
+func (s *Store) SetMachineNickname(ctx context.Context, id, nickname string) error {
+	_, err := s.Pool.Exec(ctx,
+		`UPDATE machines SET nickname=$2 WHERE id=$1`, id, nullify(nickname))
+	return err
 }
 
 // TouchMachine updates last_seen and agent version on heartbeat.

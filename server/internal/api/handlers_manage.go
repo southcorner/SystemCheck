@@ -87,6 +87,30 @@ type groupPolicyResp struct {
 	Policy  model.Policy `json:"policy"`
 }
 
+type nicknameReq struct {
+	Nickname string `json:"nickname"`
+}
+
+// handleSetNickname sets a machine's human-friendly label (e.g. the employee).
+func (a *App) handleSetNickname(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	var req nicknameReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, "bad request")
+		return
+	}
+	if len(req.Nickname) > 100 {
+		req.Nickname = req.Nickname[:100]
+	}
+	if err := a.Store.SetMachineNickname(r.Context(), id, req.Nickname); err != nil {
+		writeErr(w, http.StatusInternalServerError, "store error")
+		return
+	}
+	_ = a.Store.Audit(r.Context(), currentUser(r).Email, "set_machine_nickname", id,
+		map[string]interface{}{"nickname": req.Nickname})
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
 // handleGetPolicy returns the policy currently applied to a group (or the
 // built-in default) for the Settings UI to edit. Group defaults to "default".
 func (a *App) handleGetPolicy(w http.ResponseWriter, r *http.Request) {

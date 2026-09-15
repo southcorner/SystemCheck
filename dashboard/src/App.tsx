@@ -132,14 +132,25 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
   const [view, setView] = useState<TopView>("machines");
   const [role, setRole] = useState<string>("viewer");
 
+  const loadMachines = () => api.machines().then(setMachines).catch(() => setMachines([]));
   useEffect(() => {
-    const load = () => api.machines().then(setMachines).catch(() => setMachines([]));
-    load();
+    loadMachines();
     api.me().then((m) => setRole(m.role)).catch(() => setRole("viewer"));
     // Refresh periodically so the online/offline indicator stays current.
-    const t = setInterval(load, 60 * 1000);
+    const t = setInterval(loadMachines, 60 * 1000);
     return () => clearInterval(t);
   }, []);
+
+  const editNickname = async (m: Machine) => {
+    const name = window.prompt(`Nickname for ${m.hostname} (e.g. employee name):`, m.nickname || "");
+    if (name === null) return; // cancelled
+    try {
+      await api.setNickname(m.id, name.trim());
+      loadMachines();
+    } catch (e) {
+      alert("Could not save nickname: " + (e as Error).message);
+    }
+  };
 
   const navBtn = (v: TopView, label: string) => (
     <button className={"link" + (view === v ? " sel" : "")} onClick={() => setView(v)}>
@@ -184,7 +195,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
                 className={"machine" + (selected?.id === m.id ? " active" : "")}
                 onClick={() => setSelected(m)}
               >
-                <div className="mono">
+                <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
                   <span
                     title={isOnline(m.last_seen) ? "Online (seen in last 15 min)" : "Offline"}
                     style={{
@@ -192,12 +203,23 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
                       width: 9,
                       height: 9,
                       borderRadius: "50%",
-                      marginRight: 6,
                       background: isOnline(m.last_seen) ? "#22c55e" : "#ef4444",
+                      flex: "0 0 auto",
                     }}
                   />
-                  {m.hostname}
+                  <span className={m.nickname ? "" : "mono"} style={{ fontWeight: m.nickname ? 600 : 400 }}>
+                    {m.nickname || m.hostname}
+                  </span>
+                  <button
+                    className="link"
+                    title="Set nickname"
+                    onClick={(e) => { e.stopPropagation(); editNickname(m); }}
+                    style={{ marginLeft: "auto", padding: "0 4px" }}
+                  >
+                    ✎
+                  </button>
                 </div>
+                {m.nickname && <div className="muted small mono">{m.hostname}</div>}
                 <div className="muted small">
                   {m.assigned_user || "unassigned"} · {m.group || "no group"}
                 </div>
@@ -348,7 +370,10 @@ function MachineView({ machine }: { machine: Machine }) {
   const [tab, setTab] = useState<Tab>("apps");
   return (
     <div className="pad">
-      <h2 className="mono">{machine.hostname}</h2>
+      <h2 style={{ marginBottom: 0 }}>{machine.nickname || machine.hostname}</h2>
+      <div className="muted small mono">
+        {machine.hostname}{machine.assigned_user ? " · " + machine.assigned_user : ""}
+      </div>
       <div className="tabs">
         {TABS.map((t) => (
           <button key={t} className={"tab" + (tab === t ? " sel" : "")} onClick={() => setTab(t)}>
