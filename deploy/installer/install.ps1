@@ -21,6 +21,18 @@ New-Item -ItemType Directory -Force -Path $DataDir    | Out-Null
 $spool = Join-Path $DataDir "spool"
 New-Item -ItemType Directory -Force -Path $spool | Out-Null
 
+# --- Stop any existing install FIRST, so the running agent.exe doesn't lock the
+# file we're about to overwrite (fixes "process cannot access ... it is in use").
+if (Get-Service $ServiceName -ErrorAction SilentlyContinue) {
+    Stop-Service $ServiceName -Force -ErrorAction SilentlyContinue
+    sc.exe delete $ServiceName | Out-Null
+}
+if (Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue) {
+    Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false
+}
+Get-Process agent -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+Start-Sleep -Seconds 2
+
 # Binary in Program Files.
 Copy-Item -Force (Join-Path $here "agent.exe") (Join-Path $InstallDir "agent.exe")
 # CA + enrollment config in the data dir.
@@ -45,11 +57,6 @@ $agentJson = @{
 & icacls "$spool" /grant "*S-1-5-32-545:(OI)(CI)M" | Out-Null
 
 # --- Service (SYSTEM, session 0: privileged collectors) -----------------
-if (Get-Service $ServiceName -ErrorAction SilentlyContinue) {
-    Stop-Service $ServiceName -Force -ErrorAction SilentlyContinue
-    sc.exe delete $ServiceName | Out-Null
-    Start-Sleep -Seconds 2
-}
 New-Service -Name $ServiceName -BinaryPathName "`"$InstallDir\agent.exe`"" `
     -DisplayName "SystemCheck Agent" -StartupType Automatic `
     -Description "Transparent endpoint monitoring agent (company policy applies)." | Out-Null
@@ -62,9 +69,6 @@ catch { Write-Warning "Service did not start yet: $($_.Exception.Message). Check
 # Runs agent.exe -session-agent at each user's logon, in their interactive
 # session, as that (non-elevated) user. This is what keeps screenshots and app
 # usage working while the service handles the privileged collectors.
-if (Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue) {
-    Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false
-}
 # Launch the helper via a hidden VBScript shim so no console window flashes on
 # the user's screen at logon (the consent dialog still shows normally).
 $vbsPath = Join-Path $InstallDir "run-session.vbs"
