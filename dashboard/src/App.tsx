@@ -12,6 +12,7 @@ import {
   AdminUser,
   ViewRequest,
   Policy,
+  VisitRow,
   formatBytes,
 } from "./api";
 
@@ -250,6 +251,7 @@ const COLLECTORS: { key: keyof Policy; label: string; note?: string }[] = [
   { key: "dns", label: "DNS lookups" },
   { key: "netflow", label: "Network transfers" },
   { key: "fswatch", label: "File watch / downloads" },
+  { key: "browsing", label: "Browsing history (URLs visited)" },
   { key: "usb", label: "USB / removable media" },
   { key: "printjobs", label: "Print jobs" },
   { key: "installs", label: "Software installs" },
@@ -363,7 +365,7 @@ function SettingsView() {
   );
 }
 
-const TABS = ["apps", "screenshots", "domains", "transfers", "downloads", "security"] as const;
+const TABS = ["apps", "screenshots", "browsing", "domains", "transfers", "downloads", "security"] as const;
 type Tab = (typeof TABS)[number];
 
 function MachineView({ machine }: { machine: Machine }) {
@@ -383,6 +385,7 @@ function MachineView({ machine }: { machine: Machine }) {
       </div>
       {tab === "apps" && <AppsTab id={machine.id} />}
       {tab === "screenshots" && <ScreenshotsTab id={machine.id} />}
+      {tab === "browsing" && <BrowsingTab id={machine.id} />}
       {tab === "domains" && <DomainsTab id={machine.id} />}
       {tab === "transfers" && <TransfersTab id={machine.id} />}
       {tab === "downloads" && <DownloadsTab id={machine.id} />}
@@ -537,6 +540,58 @@ function ScreenshotsTab({ id }: { id: string }) {
           </figure>
         ))}
       </div>
+    </div>
+  );
+}
+
+function BrowsingTab({ id }: { id: string }) {
+  const [rows, setRows] = useState<VisitRow[]>([]);
+  const [q, setQ] = useState("");
+  useEffect(() => {
+    api.visits(id).then(setRows).catch(() => setRows([]));
+  }, [id]);
+  const filtered = q
+    ? rows.filter(
+        (v) =>
+          v.url.toLowerCase().includes(q.toLowerCase()) ||
+          (v.title || "").toLowerCase().includes(q.toLowerCase()) ||
+          v.domain.toLowerCase().includes(q.toLowerCase())
+      )
+    : rows;
+  return (
+    <div>
+      <input
+        placeholder="Filter by URL, title, or domain…"
+        value={q}
+        onChange={(e) => setQ(e.target.value)}
+        style={{ marginBottom: 8, width: "min(420px, 100%)" }}
+      />
+      {rows.length === 0 ? (
+        <p className="muted">No browsing history recorded yet.</p>
+      ) : (
+        <table>
+          <thead>
+            <tr>
+              <th className="left">Page</th>
+              <th className="left">Domain</th>
+              <th className="left">Browser</th>
+              <th className="right">When</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filtered.map((v, i) => (
+              <tr key={v.url + i}>
+                <td title={v.url} style={{ maxWidth: 380, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  <a href={v.url} target="_blank" rel="noreferrer">{v.title || v.url}</a>
+                </td>
+                <td className="mono small">{v.domain}</td>
+                <td className="small">{v.browser}</td>
+                <td className="right small">{new Date(v.ts).toLocaleString()}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
     </div>
   );
 }

@@ -80,6 +80,42 @@ type DownloadRow struct {
 	Source string    `json:"source"`
 }
 
+// VisitRow is one browser page visit.
+type VisitRow struct {
+	TS      time.Time `json:"ts"`
+	URL     string    `json:"url"`
+	Title   string    `json:"title"`
+	Domain  string    `json:"domain"`
+	Browser string    `json:"browser"`
+}
+
+// Visits lists browser visit events for a machine within a window, newest first.
+func (s *Store) Visits(ctx context.Context, machineID string, from, to time.Time, limit int) ([]VisitRow, error) {
+	rows, err := s.Pool.Query(ctx,
+		`SELECT ts,
+		        coalesce(data->>'url','')     AS url,
+		        coalesce(data->>'title','')   AS title,
+		        coalesce(data->>'domain','')  AS domain,
+		        coalesce(data->>'browser','') AS browser
+		   FROM events
+		  WHERE machine_id=$1 AND kind='visit' AND ts BETWEEN $2 AND $3
+		  ORDER BY ts DESC
+		  LIMIT $4`, machineID, from, to, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []VisitRow
+	for rows.Next() {
+		var r VisitRow
+		if err := rows.Scan(&r.TS, &r.URL, &r.Title, &r.Domain, &r.Browser); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
 // Downloads lists download events for a machine within a window.
 func (s *Store) Downloads(ctx context.Context, machineID string, from, to time.Time, limit int) ([]DownloadRow, error) {
 	rows, err := s.Pool.Query(ctx,

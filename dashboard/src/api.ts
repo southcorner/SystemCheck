@@ -37,6 +37,7 @@ export type DownloadRow = {
   source: string;
 };
 export type EventRow = { ts: string; kind: string; data: Record<string, any> };
+export type VisitRow = { ts: string; url: string; title: string; domain: string; browser: string };
 
 export type AdminUser = {
   id: string;
@@ -83,6 +84,7 @@ export type Policy = {
   dns: { enabled: boolean };
   netflow: { enabled: boolean; rollup_sec: number };
   fswatch: { enabled: boolean; folders: string[]; include_browser_history: boolean };
+  browsing: { enabled: boolean };
   usb: { enabled: boolean };
   printjobs: { enabled: boolean };
   installs: { enabled: boolean };
@@ -139,6 +141,7 @@ export const api = {
     reqList<ScreenshotMeta>(`/api/machines/${id}/screenshots`),
   apps: (id: string) => reqList<AppUsage>(`/api/machines/${id}/apps`),
   domains: (id: string) => reqList<DomainRow>(`/api/machines/${id}/domains`),
+  visits: (id: string) => reqList<VisitRow>(`/api/machines/${id}/visits`),
   transfers: (id: string) => reqList<TransferRow>(`/api/machines/${id}/transfers`),
   downloads: (id: string) => reqList<DownloadRow>(`/api/machines/${id}/downloads`),
   events: (id: string, kind: string) =>

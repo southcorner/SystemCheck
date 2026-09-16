@@ -41,6 +41,18 @@ func (a *App) handleMachineDownloads(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, rows)
 }
 
+func (a *App) handleMachineVisits(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	from, to := timeRange(r)
+	rows, err := a.Store.Visits(r.Context(), id, from, to, limitParam(r, 500))
+	if err != nil {
+		writeErr(w, http.StatusInternalServerError, "query error")
+		return
+	}
+	_ = a.Store.Audit(r.Context(), currentUser(r).Email, "view_visits", id, nil)
+	writeJSON(w, http.StatusOK, rows)
+}
+
 // --- alerts ---
 
 func (a *App) handleListAlerts(w http.ResponseWriter, r *http.Request) {

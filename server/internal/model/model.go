@@ -44,6 +44,7 @@ type Policy struct {
 	DNS          TogglePolicy     `json:"dns"`
 	Netflow      NetflowPolicy    `json:"netflow"`
 	Fswatch      FswatchPolicy    `json:"fswatch"`
+	Browsing     TogglePolicy     `json:"browsing"`
 	USB          TogglePolicy     `json:"usb"`
 	PrintJobs    TogglePolicy     `json:"printjobs"`
 	Installs     TogglePolicy     `json:"installs"`
@@ -156,6 +157,7 @@ func DefaultPolicy() Policy {
 		DNS:          TogglePolicy{Enabled: true},
 		Netflow:      NetflowPolicy{Enabled: true, RollupSec: 60},
 		Fswatch:      FswatchPolicy{Enabled: true, Folders: []string{`%USERPROFILE%\Downloads`}},
+		Browsing:     TogglePolicy{Enabled: true},
 		USB:          TogglePolicy{Enabled: true},
 		PrintJobs:    TogglePolicy{Enabled: true},
 		Installs:     TogglePolicy{Enabled: true},

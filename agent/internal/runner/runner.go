@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/southcorner/systemcheck/agent/internal/collectors"
+	"github.com/southcorner/systemcheck/agent/internal/collectors/browsing"
 	"github.com/southcorner/systemcheck/agent/internal/collectors/dns"
 	"github.com/southcorner/systemcheck/agent/internal/collectors/foreground"
 	"github.com/southcorner/systemcheck/agent/internal/collectors/fswatch"
@@ -32,7 +33,7 @@ import (
 
 // Version is the agent version string. Bump on agent changes so the dashboard
 // shows which machines have picked up an update.
-const Version = "0.3.0"
+const Version = "0.4.0"
 
 // Run executes the agent until ctx is cancelled.
 func Run(ctx context.Context, cfg *config.Config) error {
@@ -214,6 +215,9 @@ func startCollectors(ctx context.Context, pol wire.Policy, role Role, emit colle
 		}
 		if pol.Fswatch.Enabled {
 			active = append(active, fswatch.New(pol.Fswatch))
+		}
+		if pol.Browsing.Enabled {
+			active = append(active, browsing.New(pol.Browsing))
 		}
 	} else {
 		// Privileged: ETW/WMI/event-log collectors that require SYSTEM.

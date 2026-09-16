@@ -31,6 +31,7 @@ type Policy struct {
 	DNS          Toggle           `json:"dns"`
 	Netflow      NetflowPolicy    `json:"netflow"`
 	Fswatch      FswatchPolicy    `json:"fswatch"`
+	Browsing     Toggle           `json:"browsing"`
 	USB          Toggle           `json:"usb"`
 	PrintJobs    Toggle           `json:"printjobs"`
 	Installs     Toggle           `json:"installs"`

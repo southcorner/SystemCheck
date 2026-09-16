@@ -64,6 +64,7 @@ func (a *App) Router() http.Handler {
 	mux.Handle("GET /api/machines/{id}/apps", a.adminAuth(true, http.HandlerFunc(a.handleMachineApps)))
 	mux.Handle("GET /api/machines/{id}/events", a.adminAuth(true, http.HandlerFunc(a.handleMachineEvents)))
 	mux.Handle("GET /api/machines/{id}/domains", a.adminAuth(true, http.HandlerFunc(a.handleMachineDomains)))
+	mux.Handle("GET /api/machines/{id}/visits", a.adminAuth(true, http.HandlerFunc(a.handleMachineVisits)))
 	mux.Handle("GET /api/machines/{id}/transfers", a.adminAuth(true, http.HandlerFunc(a.handleMachineTransfers)))
 	mux.Handle("GET /api/machines/{id}/downloads", a.adminAuth(true, http.HandlerFunc(a.handleMachineDownloads)))
 	mux.Handle("GET /api/screenshots/{id}/image", a.adminAuth(true, http.HandlerFunc(a.handleScreenshotImage)))
