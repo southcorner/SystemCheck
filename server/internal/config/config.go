@@ -45,6 +45,7 @@ type Config struct {
 	AgentLatestVersion string
 	AgentDownloadURL   string
 	AgentSignatureB64  string // ed25519 signature of the release, base64
+	AgentBinaryPath    string // local path to the signed agent.exe the server serves at /v1/agent-download
 
 	// AlertWebhook, if set, receives alert JSON (SIEM/webhook export).
 	AlertWebhook string
@@ -84,6 +85,7 @@ func Load() (*Config, error) {
 		AgentLatestVersion: env("SC_AGENT_LATEST_VERSION", ""),
 		AgentDownloadURL:   env("SC_AGENT_DOWNLOAD_URL", ""),
 		AgentSignatureB64:  env("SC_AGENT_SIGNATURE_B64", ""),
+		AgentBinaryPath:    env("SC_AGENT_BINARY_PATH", ""),
 
 		AlertWebhook: env("SC_ALERT_WEBHOOK", ""),
 		TLSSANs:      splitCSV(env("SC_TLS_SANS", "")),

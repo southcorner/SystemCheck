@@ -45,6 +45,7 @@ func (a *App) Router() http.Handler {
 	// Agent endpoints (mTLS for all but enroll).
 	mux.HandleFunc("POST /v1/enroll", a.handleEnroll)
 	mux.Handle("GET /v1/agent-version", a.agentAuth(http.HandlerFunc(a.handleAgentVersion)))
+	mux.Handle("GET /v1/agent-download", a.agentAuth(http.HandlerFunc(a.handleAgentDownload)))
 	mux.Handle("GET /v1/policy", a.agentAuth(http.HandlerFunc(a.handlePolicy)))
 	mux.Handle("POST /v1/ingest", a.agentAuth(http.HandlerFunc(a.handleIngest)))
 	mux.Handle("POST /v1/screenshots", a.agentAuth(http.HandlerFunc(a.handleScreenshotUpload)))

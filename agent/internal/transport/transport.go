@@ -81,6 +81,25 @@ type AgentVersionInfo struct {
 }
 
 // GetAgentVersion fetches the advertised latest agent release.
+// Download fetches a URL over the agent's trusted mTLS connection (so the
+// server can host its own signed release binary behind the dev CA, no public
+// cert/CDN needed). Caps the read at 200 MB.
+func (c *Client) Download(ctx context.Context, url string) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	res, err := c.http.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("download: status %d", res.StatusCode)
+	}
+	return io.ReadAll(io.LimitReader(res.Body, 200<<20))
+}
+
 func (c *Client) GetAgentVersion(ctx context.Context) (*AgentVersionInfo, error) {
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/v1/agent-version", nil)
 	if err != nil {

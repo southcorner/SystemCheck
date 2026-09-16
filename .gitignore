@@ -34,3 +34,8 @@ data/
 .DS_Store
 .idea/
 .vscode/
+
+# Agent update signing key + release binaries (never commit)
+deploy/agent-signing.key
+deploy/releases/
+deploy/agent-signing.pub

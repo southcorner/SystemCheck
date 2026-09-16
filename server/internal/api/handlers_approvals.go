@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/southcorner/systemcheck/server/internal/store"
@@ -64,4 +65,22 @@ func (a *App) handleAgentVersion(w http.ResponseWriter, r *http.Request) {
 		"url":       a.Cfg.AgentDownloadURL,
 		"signature": a.Cfg.AgentSignatureB64,
 	})
+}
+
+// handleAgentDownload streams the signed agent binary to enrolled agents over
+// their mTLS connection (so no external CDN or public cert is needed). The
+// agent verifies the ed25519 signature before installing.
+func (a *App) handleAgentDownload(w http.ResponseWriter, r *http.Request) {
+	if a.Cfg.AgentBinaryPath == "" {
+		writeErr(w, http.StatusNotFound, "no agent binary configured")
+		return
+	}
+	f, err := os.Open(a.Cfg.AgentBinaryPath)
+	if err != nil {
+		writeErr(w, http.StatusNotFound, "agent binary unavailable")
+		return
+	}
+	defer f.Close()
+	w.Header().Set("Content-Type", "application/octet-stream")
+	http.ServeContent(w, r, "agent.exe", time.Time{}, f)
 }

@@ -5,9 +5,7 @@ package runner
 import (
 	"context"
 	"fmt"
-	"io"
 	"log"
-	"net/http"
 	"os"
 	"time"
 
@@ -32,8 +30,9 @@ import (
 )
 
 // Version is the agent version string. Bump on agent changes so the dashboard
-// shows which machines have picked up an update.
-const Version = "0.4.0"
+// shows which machines have picked up an update. It is a var so release builds
+// can stamp it via -ldflags "-X ...runner.Version=<ver>".
+var Version = "0.4.0"
 
 // Run executes the agent until ctx is cancelled.
 func Run(ctx context.Context, cfg *config.Config) error {
@@ -161,7 +160,7 @@ func checkForUpdate(ctx context.Context, client *transport.Client) {
 	}
 	updated, err := updater.CheckAndUpdate(ctx, Version,
 		updater.VersionInfo{Version: info.Version, URL: info.URL, Signature: info.Signature},
-		downloadURL, updater.Install)
+		client.Download, updater.Install)
 	if err != nil {
 		log.Printf("update check: %v", err)
 		return
@@ -169,24 +168,6 @@ func checkForUpdate(ctx context.Context, client *transport.Client) {
 	if updated {
 		log.Printf("update: installed %s; service will restart", info.Version)
 	}
-}
-
-// downloadURL fetches a release binary over plain HTTPS (the URL may be an
-// external CDN, not the mTLS server).
-func downloadURL(ctx context.Context, url string) ([]byte, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if err != nil {
-		return nil, err
-	}
-	res, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer res.Body.Close()
-	if res.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("download: status %d", res.StatusCode)
-	}
-	return io.ReadAll(io.LimitReader(res.Body, 200<<20))
 }
 
 // Role selects which collectors a process runs. Screenshot and foreground need
