@@ -225,7 +225,21 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
                   {m.assigned_user || "unassigned"} · {m.group || "no group"}
                 </div>
                 <div className="small">
-                  {m.last_seen ? "last seen " + new Date(m.last_seen).toLocaleString() : "never seen"}
+                  <span
+                    className="mono"
+                    title="Agent version"
+                    style={{
+                      fontSize: 11,
+                      padding: "0 5px",
+                      borderRadius: 4,
+                      border: "1px solid currentColor",
+                      opacity: 0.7,
+                      marginRight: 6,
+                    }}
+                  >
+                    v{m.agent_version || "?"}
+                  </span>
+                  {m.last_seen ? "seen " + new Date(m.last_seen).toLocaleString() : "never seen"}
                 </div>
               </div>
             ))}
@@ -374,7 +388,7 @@ function MachineView({ machine }: { machine: Machine }) {
     <div className="pad">
       <h2 style={{ marginBottom: 0 }}>{machine.nickname || machine.hostname}</h2>
       <div className="muted small mono">
-        {machine.hostname}{machine.assigned_user ? " · " + machine.assigned_user : ""}
+        {machine.hostname}{machine.assigned_user ? " · " + machine.assigned_user : ""} · agent v{machine.agent_version || "?"}
       </div>
       <div className="tabs">
         {TABS.map((t) => (
