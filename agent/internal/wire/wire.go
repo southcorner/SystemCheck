@@ -114,6 +114,14 @@ type Heartbeat struct {
 	Consented       bool   `json:"consented,omitempty"`
 }
 
+// HeartbeatResponse is the server's reply to a heartbeat. UpdateVersion lets
+// the server nudge the agent to update promptly (on its next ~60s heartbeat)
+// instead of waiting for the periodic update check.
+type HeartbeatResponse struct {
+	OK            bool   `json:"ok"`
+	UpdateVersion string `json:"update_version"`
+}
+
 // SessionState is the handoff file the user-session helper writes into the
 // spool dir and the service reads: who is logged in and whether they accepted
 // the monitoring notice. Kept in the (user-writable) spool so the unprivileged

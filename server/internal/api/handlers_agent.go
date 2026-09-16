@@ -150,5 +150,7 @@ func (a *App) handleHeartbeat(w http.ResponseWriter, r *http.Request) {
 			_ = a.Store.RecordConsent(r.Context(), hb.InteractiveUser, m.ID, "agent-clickthrough", hb.PolicyVersion)
 		}
 	}
-	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+	// Advertise the latest release so the agent can update promptly on its next
+	// heartbeat rather than waiting for the periodic check.
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "update_version": a.Cfg.AgentLatestVersion})
 }

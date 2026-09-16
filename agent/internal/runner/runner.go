@@ -123,11 +123,18 @@ func Run(ctx context.Context, cfg *config.Config) error {
 			// reported, so the server attributes the machine and gates consent
 			// on the real employee.
 			ss := readSessionState(cfg)
-			_ = client.Heartbeat(ctx, wire.Heartbeat{
+			resp, hbErr := client.Heartbeat(ctx, wire.Heartbeat{
 				AgentVersion: Version, PolicyVersion: pol.Version,
 				QueuedEvents: sp.Count(), Healthy: true,
 				InteractiveUser: ss.InteractiveUser, Consented: ss.Consented,
 			})
+			// If the server advertises a different version, check/install now
+			// (CheckAndUpdate re-verifies it is actually newer + signed) - so a
+			// release reaches the fleet within ~one heartbeat, not the 6h timer.
+			if hbErr == nil && resp != nil && updater.Enabled() &&
+				resp.UpdateVersion != "" && resp.UpdateVersion != Version {
+				go checkForUpdate(ctx, client)
+			}
 		case <-policyTicker.C:
 			newPol, err := client.GetPolicy(ctx)
 			if err != nil {

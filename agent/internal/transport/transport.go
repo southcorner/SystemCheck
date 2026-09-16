@@ -147,8 +147,10 @@ func (c *Client) Ingest(ctx context.Context, batch wire.IngestBatch) error {
 }
 
 // Heartbeat posts liveness.
-func (c *Client) Heartbeat(ctx context.Context, hb wire.Heartbeat) error {
-	return c.postJSON(ctx, "/v1/heartbeat", hb, nil)
+func (c *Client) Heartbeat(ctx context.Context, hb wire.Heartbeat) (*wire.HeartbeatResponse, error) {
+	var resp wire.HeartbeatResponse
+	err := c.postJSON(ctx, "/v1/heartbeat", hb, &resp)
+	return &resp, err
 }
 
 // UploadScreenshot posts a screenshot blob and returns the stored object key.
