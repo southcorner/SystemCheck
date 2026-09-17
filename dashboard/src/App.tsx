@@ -24,6 +24,12 @@ function isOnline(lastSeen: string | null): boolean {
   return Date.now() - new Date(lastSeen).getTime() < ONLINE_WINDOW_MS;
 }
 
+// fmtIST renders a timestamp in India Standard Time, consistently for every
+// viewer regardless of their browser timezone.
+function fmtIST(ts: string | number | Date): string {
+  return new Date(ts).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" });
+}
+
 type Stage = "login" | "mfa" | "app";
 
 export function App() {
@@ -240,7 +246,7 @@ function Dashboard({ onLogout }: { onLogout: () => void }) {
                   >
                     v{m.agent_version || "?"}
                   </span>
-                  {m.last_seen ? "seen " + new Date(m.last_seen).toLocaleString() : "never seen"}
+                  {m.last_seen ? "seen " + fmtIST(m.last_seen) : "never seen"}
                 </div>
               </div>
             ))}
@@ -552,7 +558,7 @@ function ScreenshotsTab({ id }: { id: string }) {
               ✕
             </button>
             <img src={api.imageURL(s.id)} alt={s.ts} loading="lazy" />
-            <figcaption className="small">{new Date(s.ts).toLocaleString()}</figcaption>
+            <figcaption className="small">{fmtIST(s.ts)}</figcaption>
           </figure>
         ))}
       </div>
@@ -569,7 +575,7 @@ function HealthTab({ id }: { id: string }) {
   return (
     <div>
       <div className="muted small" style={{ marginBottom: 8, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-        <span>{h?.health_at ? "Last report " + new Date(h.health_at).toLocaleString() : "No health report yet."}</span>
+        <span>{h?.health_at ? "Last report " + fmtIST(h.health_at) : "No health report yet."}</span>
         <button className="link" onClick={load}>Refresh</button>
         <button
           onClick={async () => {
@@ -674,7 +680,7 @@ function BrowsingTab({ id }: { id: string }) {
                 </td>
                 <td className="mono small">{v.domain}</td>
                 <td className="small">{v.browser}</td>
-                <td className="right small">{new Date(v.ts).toLocaleString()}</td>
+                <td className="right small">{fmtIST(v.ts)}</td>
               </tr>
             ))}
           </tbody>
@@ -704,7 +710,7 @@ function DomainsTab({ id }: { id: string }) {
           <tr key={d.domain}>
             <td className="mono">{d.domain}</td>
             <td className="right">{d.count}</td>
-            <td className="right small">{new Date(d.last_seen).toLocaleString()}</td>
+            <td className="right small">{fmtIST(d.last_seen)}</td>
           </tr>
         ))}
       </tbody>
@@ -764,7 +770,7 @@ function DownloadsTab({ id }: { id: string }) {
             </td>
             <td className="right">{formatBytes(d.size)}</td>
             <td className="small" title={d.url}>{d.domain || "—"}</td>
-            <td className="right small">{new Date(d.ts).toLocaleString()}</td>
+            <td className="right small">{fmtIST(d.ts)}</td>
           </tr>
         ))}
       </tbody>
@@ -816,7 +822,7 @@ function SecurityTab({ id }: { id: string }) {
                   <td>{String(e.data.action)}</td>
                   <td className="mono">{String(e.data.drive ?? "")}</td>
                   <td>{String(e.data.label ?? "")}</td>
-                  <td className="right small">{new Date(e.ts).toLocaleString()}</td>
+                  <td className="right small">{fmtIST(e.ts)}</td>
                 </tr>
               ))}
             </tbody>
@@ -835,7 +841,7 @@ function SecurityTab({ id }: { id: string }) {
                   <td className="mono">{String(e.data.document ?? "")}</td>
                   <td>{String(e.data.printer ?? "")}</td>
                   <td className="right">{String(e.data.pages ?? "")} pp</td>
-                  <td className="right small">{new Date(e.ts).toLocaleString()}</td>
+                  <td className="right small">{fmtIST(e.ts)}</td>
                 </tr>
               ))}
             </tbody>
@@ -853,7 +859,7 @@ function SecurityTab({ id }: { id: string }) {
                 <tr key={i}>
                   <td className="mono">{String(e.data.name ?? "")}</td>
                   <td>{String(e.data.version ?? "")}</td>
-                  <td className="right small">{new Date(e.ts).toLocaleString()}</td>
+                  <td className="right small">{fmtIST(e.ts)}</td>
                 </tr>
               ))}
             </tbody>
@@ -872,7 +878,7 @@ function SecurityTab({ id }: { id: string }) {
                   <td>{String(e.data.kind ?? "")}</td>
                   <td className="mono">{String(e.data.account ?? "")}</td>
                   <td className="small">{String(e.data.source_ip ?? "")}</td>
-                  <td className="right small">{new Date(e.ts).toLocaleString()}</td>
+                  <td className="right small">{fmtIST(e.ts)}</td>
                 </tr>
               ))}
             </tbody>
@@ -1022,7 +1028,7 @@ function AlertsView() {
                 <span className={"sev sev-" + a.severity}>{a.severity}</span>
               </td>
               <td>{a.message}</td>
-              <td className="right small">{new Date(a.ts).toLocaleString()}</td>
+              <td className="right small">{fmtIST(a.ts)}</td>
               <td className="right">
                 {!a.acknowledged && (
                   <button

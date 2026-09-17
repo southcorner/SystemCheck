@@ -9,6 +9,7 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+	_ "time/tzdata" // embedded tz database so Asia/Kolkata resolves without OS tzdata
 
 	"github.com/southcorner/systemcheck/server/internal/api"
 	"github.com/southcorner/systemcheck/server/internal/auth"
@@ -20,6 +21,11 @@ import (
 )
 
 func main() {
+	// IST for server log timestamps (data is stored in UTC, shown in IST by the
+	// dashboard).
+	if loc, err := time.LoadLocation("Asia/Kolkata"); err == nil {
+		time.Local = loc
+	}
 	log.SetFlags(log.LstdFlags | log.Lmsgprefix)
 	log.SetPrefix("systemcheck ")
 

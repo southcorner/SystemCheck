@@ -14,12 +14,20 @@ import (
 	"os/signal"
 	"path/filepath"
 	"syscall"
+	"time"
+	_ "time/tzdata" // embedded tz database so Asia/Kolkata resolves without OS tzdata
 
 	"github.com/southcorner/systemcheck/agent/internal/config"
 	"github.com/southcorner/systemcheck/agent/internal/runner"
 )
 
 func main() {
+	// Use IST for all local timestamps (log lines) regardless of the machine's
+	// own timezone, so logs read consistently across the fleet. Event data is
+	// still sent in UTC and rendered in IST by the dashboard.
+	if loc, err := time.LoadLocation("Asia/Kolkata"); err == nil {
+		time.Local = loc
+	}
 	log.SetPrefix("systemcheck-agent ")
 	log.SetFlags(log.LstdFlags | log.Lmsgprefix)
 
