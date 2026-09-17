@@ -2,11 +2,38 @@ package store
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/southcorner/systemcheck/server/internal/model"
 )
+
+// stripNUL removes NUL characters from event string values. Postgres JSONB
+// rejects the U+0000 escape (SQLSTATE 22P05), and a single such value (e.g. a
+// window title or filename with an embedded NUL) would otherwise poison the
+// whole ingest batch and stall the agent's upload queue indefinitely.
+func stripNUL(v interface{}) interface{} {
+	switch x := v.(type) {
+	case string:
+		if strings.IndexByte(x, 0) >= 0 {
+			return strings.ReplaceAll(x, "\x00", "")
+		}
+		return x
+	case map[string]interface{}:
+		for k, vv := range x {
+			x[k] = stripNUL(vv)
+		}
+		return x
+	case []interface{}:
+		for i := range x {
+			x[i] = stripNUL(x[i])
+		}
+		return x
+	default:
+		return v
+	}
+}
 
 // InsertEvents writes a batch of events for a machine and returns how many were
 // accepted. Screenshot-kind events additionally create a screenshots metadata
@@ -20,6 +47,10 @@ func (s *Store) InsertEvents(ctx context.Context, machineID string, events []mod
 		ts := e.TS
 		if ts.IsZero() {
 			ts = time.Now()
+		}
+		// Strip NUL bytes so a poisoned string can't fail the whole JSONB insert.
+		for k, v := range e.Data {
+			e.Data[k] = stripNUL(v)
 		}
 		batch.Queue(
 			`INSERT INTO events(ts, machine_id, kind, data) VALUES($1,$2,$3,$4)`,
