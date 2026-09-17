@@ -61,6 +61,7 @@ func (a *App) Router() http.Handler {
 	// Admin data (require MFA-complete session).
 	mux.Handle("GET /api/machines", a.adminAuth(true, http.HandlerFunc(a.handleListMachines)))
 	mux.Handle("POST /api/machines/{id}/nickname", a.adminAuth(true, a.requireRole("admin", "", http.HandlerFunc(a.handleSetNickname))))
+	mux.Handle("POST /api/machines/{id}/command", a.adminAuth(true, a.requireRole("admin", "", http.HandlerFunc(a.handleSetMachineCommand))))
 	mux.Handle("GET /api/machines/{id}/screenshots", a.adminAuth(true, http.HandlerFunc(a.handleMachineScreenshots)))
 	mux.Handle("GET /api/machines/{id}/apps", a.adminAuth(true, http.HandlerFunc(a.handleMachineApps)))
 	mux.Handle("GET /api/machines/{id}/events", a.adminAuth(true, http.HandlerFunc(a.handleMachineEvents)))

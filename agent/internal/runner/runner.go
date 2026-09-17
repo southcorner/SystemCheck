@@ -82,7 +82,8 @@ func Run(ctx context.Context, cfg *config.Config) error {
 
 	// Hand the machine id + effective policy to the user-session helper so it
 	// can capture screenshots/foreground with no server credentials of its own.
-	writeRuntime(cfg, machineID, pol)
+	restartNonce := 0
+	writeRuntime(cfg, machineID, pol, restartNonce)
 
 	svcHealth := newHealth("service")
 	collectorCtx, cancelCollectors := context.WithCancel(ctx)
@@ -137,6 +138,19 @@ func Run(ctx context.Context, cfg *config.Config) error {
 				resp.UpdateVersion != "" && resp.UpdateVersion != Version {
 				go checkForUpdate(ctx, client)
 			}
+			// Server-requested restart of the machine's collectors: restart the
+			// service's own collectors and bump the nonce so the session helper
+			// restarts its collectors too.
+			if hbErr == nil && resp != nil && resp.Command == "restart" {
+				log.Printf("server requested collector restart")
+				cancelCollectors()
+				collectorCtx, cancelCollectors = context.WithCancel(ctx)
+				if pol.Active {
+					startCollectors(collectorCtx, *pol, RoleService, emit, emitBlob, svcHealth)
+				}
+				restartNonce++
+				writeRuntime(cfg, machineID, pol, restartNonce)
+			}
 		case <-policyTicker.C:
 			newPol, err := client.GetPolicy(ctx)
 			if err != nil {
@@ -144,7 +158,7 @@ func Run(ctx context.Context, cfg *config.Config) error {
 			}
 			// Always refresh the helper's handoff so a changed active state or
 			// policy (e.g. consent just recorded) reaches the session helper.
-			writeRuntime(cfg, machineID, newPol)
+			writeRuntime(cfg, machineID, newPol, restartNonce)
 			if newPol.Version != pol.Version || newPol.Active != pol.Active {
 				log.Printf("policy changed: v%d active=%v", newPol.Version, newPol.Active)
 				cancelCollectors()

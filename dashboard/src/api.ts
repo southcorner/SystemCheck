@@ -145,6 +145,11 @@ export const api = {
   domains: (id: string) => reqList<DomainRow>(`/api/machines/${id}/domains`),
   visits: (id: string) => reqList<VisitRow>(`/api/machines/${id}/visits`),
   health: (id: string) => req<MachineHealth>(`/api/machines/${id}/health`),
+  command: (id: string, command: string) =>
+    req<{ ok: boolean }>(`/api/machines/${id}/command`, {
+      method: "POST",
+      body: JSON.stringify({ command }),
+    }),
   transfers: (id: string) => reqList<TransferRow>(`/api/machines/${id}/transfers`),
   downloads: (id: string) => reqList<DownloadRow>(`/api/machines/${id}/downloads`),
   events: (id: string, kind: string) =>

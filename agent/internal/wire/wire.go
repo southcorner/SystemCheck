@@ -152,4 +152,7 @@ type SessionState struct {
 type Runtime struct {
 	MachineID string `json:"machine_id"`
 	Policy    Policy `json:"policy"`
+	// RestartNonce is bumped by the service to ask the session helper to restart
+	// its collectors on demand (e.g. an admin "restart collectors" command).
+	RestartNonce int `json:"restart_nonce"`
 }

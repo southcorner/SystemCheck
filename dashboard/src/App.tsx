@@ -567,9 +567,18 @@ function HealthTab({ id }: { id: string }) {
   const cols = h?.collectors || [];
   return (
     <div>
-      <div className="muted small" style={{ marginBottom: 8 }}>
-        {h?.health_at ? "Last report " + new Date(h.health_at).toLocaleString() : "No health report yet."}{" "}
+      <div className="muted small" style={{ marginBottom: 8, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+        <span>{h?.health_at ? "Last report " + new Date(h.health_at).toLocaleString() : "No health report yet."}</span>
         <button className="link" onClick={load}>Refresh</button>
+        <button
+          onClick={async () => {
+            if (!confirm("Ask this machine to restart all its collectors?")) return;
+            try { await api.command(id, "restart"); alert("Restart requested — applies within ~60s."); }
+            catch (e) { alert("Failed: " + (e as Error).message); }
+          }}
+        >
+          Restart collectors
+        </button>
       </div>
       {cols.length === 0 ? (
         <p className="muted">No collector status reported yet.</p>

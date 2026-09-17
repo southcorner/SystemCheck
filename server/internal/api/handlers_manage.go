@@ -91,6 +91,34 @@ type nicknameReq struct {
 	Nickname string `json:"nickname"`
 }
 
+type commandReq struct {
+	Command string `json:"command"`
+}
+
+// handleSetMachineCommand queues a one-shot command for the machine's next
+// heartbeat ("restart" its collectors, "sendlog" to upload its log).
+func (a *App) handleSetMachineCommand(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	var req commandReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeErr(w, http.StatusBadRequest, "bad request")
+		return
+	}
+	switch req.Command {
+	case "restart", "sendlog":
+	default:
+		writeErr(w, http.StatusBadRequest, "unknown command")
+		return
+	}
+	if err := a.Store.SetPendingCommand(r.Context(), id, req.Command); err != nil {
+		writeErr(w, http.StatusInternalServerError, "store error")
+		return
+	}
+	_ = a.Store.Audit(r.Context(), currentUser(r).Email, "machine_command", id,
+		map[string]interface{}{"command": req.Command})
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
 // handleSetNickname sets a machine's human-friendly label (e.g. the employee).
 func (a *App) handleSetNickname(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")

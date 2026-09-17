@@ -91,6 +91,28 @@ func (s *Store) TouchMachine(ctx context.Context, id, agentVersion string) error
 	return err
 }
 
+// SetPendingCommand queues a one-shot command for a machine's next heartbeat.
+func (s *Store) SetPendingCommand(ctx context.Context, id, cmd string) error {
+	_, err := s.Pool.Exec(ctx, `UPDATE machines SET pending_command=$2 WHERE id=$1`, id, nullify(cmd))
+	return err
+}
+
+// ConsumePendingCommand returns and clears the machine's pending command.
+func (s *Store) ConsumePendingCommand(ctx context.Context, id string) (string, error) {
+	var cmd *string
+	err := s.Pool.QueryRow(ctx,
+		`WITH old AS (SELECT pending_command AS c FROM machines WHERE id=$1)
+		 UPDATE machines SET pending_command=NULL WHERE id=$1
+		 RETURNING (SELECT c FROM old)`, id).Scan(&cmd)
+	if err != nil {
+		return "", noRows(err)
+	}
+	if cmd == nil {
+		return "", nil
+	}
+	return *cmd, nil
+}
+
 // SetMachineHealth stores the latest collector-status report for a machine.
 func (s *Store) SetMachineHealth(ctx context.Context, id string, collectors []model.CollectorStatus) error {
 	raw, err := json.Marshal(collectors)

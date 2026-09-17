@@ -171,7 +171,12 @@ func (a *App) handleHeartbeat(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Deliver a queued one-shot command (restart / sendlog), if any.
+	cmd, _ := a.Store.ConsumePendingCommand(r.Context(), m.ID)
+
 	// Advertise the latest release so the agent can update promptly on its next
 	// heartbeat rather than waiting for the periodic check.
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "update_version": a.Cfg.AgentLatestVersion})
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok": true, "update_version": a.Cfg.AgentLatestVersion, "command": cmd,
+	})
 }

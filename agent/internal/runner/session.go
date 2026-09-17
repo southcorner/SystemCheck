@@ -47,11 +47,11 @@ func sessionPath(cfg *config.Config) string { return filepath.Join(cfg.SpoolDir(
 
 // writeRuntime persists the machine id + current policy for the session helper.
 // Best-effort: a helper simply waits until the file appears.
-func writeRuntime(cfg *config.Config, machineID string, pol *wire.Policy) {
+func writeRuntime(cfg *config.Config, machineID string, pol *wire.Policy, restartNonce int) {
 	if pol == nil {
 		return
 	}
-	rt := wire.Runtime{MachineID: machineID, Policy: *pol}
+	rt := wire.Runtime{MachineID: machineID, Policy: *pol, RestartNonce: restartNonce}
 	writeJSONFile(runtimePath(cfg), rt)
 }
 
@@ -164,8 +164,9 @@ func runSessionGeneration(ctx context.Context, cfg *config.Config, sp *spool.Spo
 		if err != nil {
 			continue
 		}
-		if cur.Policy.Version != rt.Policy.Version || cur.Policy.Active != rt.Policy.Active {
-			return // caller re-evaluates and starts the next generation
+		if cur.Policy.Version != rt.Policy.Version || cur.Policy.Active != rt.Policy.Active ||
+			cur.RestartNonce != rt.RestartNonce {
+			return // policy changed or a restart was requested: start a new generation
 		}
 	}
 }
