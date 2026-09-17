@@ -73,8 +73,8 @@ func defaultConfigPath() string {
 	return defaultConfigPathOS()
 }
 
-// setupLogging tees the log to a file (in addition to stderr) so the service's
-// startup and runtime errors are visible without a console.
+// setupLogging tees the log to a file (plus stderr) so the service's startup and
+// runtime errors are visible without a console.
 func setupLogging(dataDir string, sessionAgent bool) {
 	path := filepath.Join(dataDir, "agent.log")
 	if sessionAgent {
@@ -85,8 +85,20 @@ func setupLogging(dataDir string, sessionAgent bool) {
 		log.Printf("log file %s: %v (continuing with stderr only)", path, err)
 		return
 	}
-	log.SetOutput(io.MultiWriter(os.Stderr, f))
+	// A Windows service has no valid stderr, so a direct MultiWriter(os.Stderr,f)
+	// aborts on the stderr write and never reaches the file. Wrap stderr so its
+	// errors are swallowed and the file is always written.
+	log.SetOutput(io.MultiWriter(errIgnoringWriter{os.Stderr}, f))
 	log.Printf("=== agent starting (session_helper=%v, pid=%d) ===", sessionAgent, os.Getpid())
+}
+
+// errIgnoringWriter forwards writes but never reports an error, so a dead
+// stderr (service with no console) can't block a MultiWriter.
+type errIgnoringWriter struct{ w io.Writer }
+
+func (e errIgnoringWriter) Write(p []byte) (int, error) {
+	_, _ = e.w.Write(p)
+	return len(p), nil
 }
 
 // runConsole runs the agent in the foreground.
