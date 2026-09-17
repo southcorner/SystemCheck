@@ -562,8 +562,9 @@ function ScreenshotsTab({ id }: { id: string }) {
 
 function HealthTab({ id }: { id: string }) {
   const [h, setH] = useState<MachineHealth | null>(null);
+  const [logText, setLogText] = useState<string | null>(null);
   const load = () => api.health(id).then(setH).catch(() => setH({ collectors: null, health_at: null }));
-  useEffect(() => { load(); }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { load(); setLogText(null); }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
   const cols = h?.collectors || [];
   return (
     <div>
@@ -579,7 +580,28 @@ function HealthTab({ id }: { id: string }) {
         >
           Restart collectors
         </button>
+        <button
+          onClick={async () => {
+            try { await api.command(id, "sendlog"); alert("Log requested — click 'View log' in ~60s."); }
+            catch (e) { alert("Failed: " + (e as Error).message); }
+          }}
+        >
+          Fetch log
+        </button>
+        <button
+          onClick={async () => {
+            try { const r = await api.agentLog(id); setLogText(r.log || "(no log uploaded yet)"); }
+            catch (e) { alert("Failed: " + (e as Error).message); }
+          }}
+        >
+          View log
+        </button>
       </div>
+      {logText !== null && (
+        <pre style={{ maxHeight: 320, overflow: "auto", background: "#0b0b0b0d", padding: 8, fontSize: 12, whiteSpace: "pre-wrap" }}>
+          {logText}
+        </pre>
+      )}
       {cols.length === 0 ? (
         <p className="muted">No collector status reported yet.</p>
       ) : (

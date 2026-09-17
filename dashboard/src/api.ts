@@ -150,6 +150,8 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ command }),
     }),
+  agentLog: (id: string) =>
+    req<{ log: string; log_at: string | null }>(`/api/machines/${id}/log`),
   transfers: (id: string) => reqList<TransferRow>(`/api/machines/${id}/transfers`),
   downloads: (id: string) => reqList<DownloadRow>(`/api/machines/${id}/downloads`),
   events: (id: string, kind: string) =>

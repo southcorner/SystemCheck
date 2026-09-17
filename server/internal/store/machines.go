@@ -128,6 +128,29 @@ func (s *Store) SweepOfflineMachines(ctx context.Context, staleBefore time.Time)
 	return n, nil
 }
 
+// SetMachineLog stores an uploaded agent log tail (capped) for a machine.
+func (s *Store) SetMachineLog(ctx context.Context, id, logText string) error {
+	const cap = 256 * 1024
+	if len(logText) > cap {
+		logText = logText[len(logText)-cap:]
+	}
+	_, err := s.Pool.Exec(ctx, `UPDATE machines SET last_log=$2, last_log_at=now() WHERE id=$1`, id, logText)
+	return err
+}
+
+// GetMachineLog returns the last uploaded agent log and its time.
+func (s *Store) GetMachineLog(ctx context.Context, id string) (string, *time.Time, error) {
+	var logText *string
+	var at *time.Time
+	if err := s.Pool.QueryRow(ctx, `SELECT last_log, last_log_at FROM machines WHERE id=$1`, id).Scan(&logText, &at); err != nil {
+		return "", nil, noRows(err)
+	}
+	if logText == nil {
+		return "", at, nil
+	}
+	return *logText, at, nil
+}
+
 // SetPendingCommand queues a one-shot command for a machine's next heartbeat.
 func (s *Store) SetPendingCommand(ctx context.Context, id, cmd string) error {
 	_, err := s.Pool.Exec(ctx, `UPDATE machines SET pending_command=$2 WHERE id=$1`, id, nullify(cmd))

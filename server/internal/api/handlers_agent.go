@@ -129,6 +129,18 @@ func (a *App) handleScreenshotUpload(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"object_key": fullKey})
 }
 
+// handleAgentLog stores an agent-uploaded log tail (in response to a "sendlog"
+// command), so admins can investigate without remote access.
+func (a *App) handleAgentLog(w http.ResponseWriter, r *http.Request) {
+	m := currentMachine(r)
+	var body struct {
+		Log string `json:"log"`
+	}
+	_ = json.NewDecoder(io.LimitReader(r.Body, 2<<20)).Decode(&body)
+	_ = a.Store.SetMachineLog(r.Context(), m.ID, body.Log)
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
+}
+
 // handleHeartbeat updates machine liveness.
 func (a *App) handleHeartbeat(w http.ResponseWriter, r *http.Request) {
 	m := currentMachine(r)

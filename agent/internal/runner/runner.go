@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/southcorner/systemcheck/agent/internal/collectors"
@@ -151,6 +153,10 @@ func Run(ctx context.Context, cfg *config.Config) error {
 				restartNonce++
 				writeRuntime(cfg, machineID, pol, restartNonce)
 			}
+			// Server-requested log upload.
+			if hbErr == nil && resp != nil && resp.Command == "sendlog" {
+				go uploadLogs(ctx, client, cfg)
+			}
 		case <-policyTicker.C:
 			newPol, err := client.GetPolicy(ctx)
 			if err != nil {
@@ -172,6 +178,31 @@ func Run(ctx context.Context, cfg *config.Config) error {
 				pol = newPol
 			}
 		}
+	}
+}
+
+// uploadLogs sends the tail of the agent + session-helper logs to the server
+// in response to a "sendlog" command.
+func uploadLogs(ctx context.Context, client *transport.Client, cfg *config.Config) {
+	const tail = 64 * 1024
+	var b strings.Builder
+	for _, p := range []string{
+		filepath.Join(cfg.DataDir, "agent.log"),
+		filepath.Join(cfg.SpoolDir(), "agent-session.log"),
+	} {
+		data, err := os.ReadFile(p)
+		if err != nil {
+			continue
+		}
+		if len(data) > tail {
+			data = data[len(data)-tail:]
+		}
+		b.WriteString("===== " + p + " =====\n")
+		b.Write(data)
+		b.WriteString("\n")
+	}
+	if b.Len() > 0 {
+		_ = client.UploadLog(ctx, b.String())
 	}
 }
 

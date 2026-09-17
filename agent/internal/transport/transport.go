@@ -81,6 +81,12 @@ type AgentVersionInfo struct {
 }
 
 // GetAgentVersion fetches the advertised latest agent release.
+// UploadLog sends an agent log tail to the server (in response to a "sendlog"
+// command) so admins can review it without remote access.
+func (c *Client) UploadLog(ctx context.Context, logText string) error {
+	return c.postJSON(ctx, "/v1/agent-log", map[string]string{"log": logText}, nil)
+}
+
 // Download fetches a URL over the agent's trusted mTLS connection (so the
 // server can host its own signed release binary behind the dev CA, no public
 // cert/CDN needed). Caps the read at 200 MB.

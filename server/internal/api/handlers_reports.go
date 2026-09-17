@@ -41,6 +41,17 @@ func (a *App) handleMachineDownloads(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, rows)
 }
 
+func (a *App) handleMachineLog(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	logText, at, err := a.Store.GetMachineLog(r.Context(), id)
+	if err != nil {
+		writeErr(w, http.StatusNotFound, "not found")
+		return
+	}
+	_ = a.Store.Audit(r.Context(), currentUser(r).Email, "view_agent_log", id, nil)
+	writeJSON(w, http.StatusOK, map[string]any{"log": logText, "log_at": at})
+}
+
 func (a *App) handleMachineHealth(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	collectors, at, err := a.Store.GetMachineHealth(r.Context(), id)
