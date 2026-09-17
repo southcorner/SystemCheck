@@ -101,6 +101,7 @@ func RunSessionAgent(ctx context.Context, cfg *config.Config) error {
 
 	user := currentInteractiveUser()
 	log.Printf("session helper starting for user %q", user)
+	sh := newHealth("session")
 
 	// Consent click-through (once per user). Collection stays off until accepted.
 	consented := hasLocalConsent(cfg, user)
@@ -114,32 +115,34 @@ func RunSessionAgent(ctx context.Context, cfg *config.Config) error {
 		}
 	}
 	// Publish identity + consent for the service's heartbeat.
-	writeSessionState(cfg, user, consented)
+	writeSessionState(cfg, user, consented, sh)
 
 	for {
 		if ctx.Err() != nil {
 			return nil
 		}
-		writeSessionState(cfg, user, consented)
+		writeSessionState(cfg, user, consented, sh)
 
 		rt, err := readRuntime(cfg)
 		active := err == nil && consented && rt.Policy.Active &&
-			(rt.Policy.Screenshot.Enabled || rt.Policy.Foreground.Enabled)
+			(rt.Policy.Screenshot.Enabled || rt.Policy.Foreground.Enabled ||
+				rt.Policy.Fswatch.Enabled || rt.Policy.Browsing.Enabled)
 		if !active {
+			sh.reset()
 			if !sleepCtx(ctx, 20*time.Second) {
 				return nil
 			}
 			continue
 		}
 		// Run this policy generation until the policy changes or ctx is cancelled.
-		runSessionGeneration(ctx, cfg, sp, rt)
+		runSessionGeneration(ctx, cfg, sp, rt, user, consented, sh)
 	}
 }
 
 // runSessionGeneration runs the desktop collectors for one policy version and
 // returns when the policy version changes or ctx is cancelled. Its cancel func
 // is deferred in this scope, so collectors always stop cleanly.
-func runSessionGeneration(ctx context.Context, cfg *config.Config, sp *spool.Spool, rt *wire.Runtime) {
+func runSessionGeneration(ctx context.Context, cfg *config.Config, sp *spool.Spool, rt *wire.Runtime, user string, consented bool, sh *healthRegistry) {
 	genCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -150,9 +153,10 @@ func runSessionGeneration(ctx context.Context, cfg *config.Config, sp *spool.Spo
 		}
 		return fmt.Sprintf("%s/%s", rt.MachineID, key), nil
 	}
-	startCollectors(genCtx, rt.Policy, RoleSession, emit, emitBlob)
+	startCollectors(genCtx, rt.Policy, RoleSession, emit, emitBlob, sh)
 
 	for {
+		writeSessionState(cfg, user, consented, sh) // keep the handoff fresh while running
 		if !sleepCtx(ctx, 20*time.Second) {
 			return
 		}
@@ -178,12 +182,16 @@ func sleepCtx(ctx context.Context, d time.Duration) bool {
 	}
 }
 
-func writeSessionState(cfg *config.Config, user string, consented bool) {
-	writeJSONFile(sessionPath(cfg), wire.SessionState{
+func writeSessionState(cfg *config.Config, user string, consented bool, sh *healthRegistry) {
+	ss := wire.SessionState{
 		InteractiveUser: user,
 		Consented:       consented,
 		UpdatedAt:       time.Now().UTC().Format(time.RFC3339),
-	})
+	}
+	if sh != nil {
+		ss.Collectors = sh.snapshot()
+	}
+	writeJSONFile(sessionPath(cfg), ss)
 }
 
 // Local per-user consent marker so the click-through appears at most once per

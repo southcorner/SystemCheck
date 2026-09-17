@@ -84,9 +84,10 @@ func Run(ctx context.Context, cfg *config.Config) error {
 	// can capture screenshots/foreground with no server credentials of its own.
 	writeRuntime(cfg, machineID, pol)
 
+	svcHealth := newHealth("service")
 	collectorCtx, cancelCollectors := context.WithCancel(ctx)
 	if pol.Active {
-		startCollectors(collectorCtx, *pol, RoleService, emit, emitBlob)
+		startCollectors(collectorCtx, *pol, RoleService, emit, emitBlob, svcHealth)
 	}
 
 	drainTicker := time.NewTicker(15 * time.Second)
@@ -127,6 +128,7 @@ func Run(ctx context.Context, cfg *config.Config) error {
 				AgentVersion: Version, PolicyVersion: pol.Version,
 				QueuedEvents: sp.Count(), Healthy: true,
 				InteractiveUser: ss.InteractiveUser, Consented: ss.Consented,
+				Collectors: mergedCollectorHealth(svcHealth, ss, pol),
 			})
 			// If the server advertises a different version, check/install now
 			// (CheckAndUpdate re-verifies it is actually newer + signed) - so a
@@ -149,7 +151,9 @@ func Run(ctx context.Context, cfg *config.Config) error {
 				collectorCtx, cancelCollectors = context.WithCancel(ctx)
 				showIndicator(newPol.Active)
 				if newPol.Active {
-					startCollectors(collectorCtx, *newPol, RoleService, emit, emitBlob)
+					startCollectors(collectorCtx, *newPol, RoleService, emit, emitBlob, svcHealth)
+				} else {
+					svcHealth.reset()
 				}
 				pol = newPol
 			}
@@ -188,7 +192,7 @@ const (
 	RoleSession             // user-session helper: desktop-bound collectors
 )
 
-func startCollectors(ctx context.Context, pol wire.Policy, role Role, emit collectors.Emit, emitBlob collectors.EmitBlob) {
+func startCollectors(ctx context.Context, pol wire.Policy, role Role, emit collectors.Emit, emitBlob collectors.EmitBlob, hr *healthRegistry) {
 	var active []collectors.Collector
 	if role == RoleSession {
 		// Desktop/user-scoped: only meaningful inside the logged-in user's
@@ -231,11 +235,24 @@ func startCollectors(ctx context.Context, pol wire.Policy, role Role, emit colle
 			active = append(active, seclog.New(pol.Seclog))
 		}
 	}
+	if hr != nil {
+		hr.reset()
+	}
 	for _, c := range active {
 		c := c
+		if hr != nil {
+			hr.set(c.Name(), true, "")
+		}
 		go func() {
-			if err := c.Start(ctx, emit, emitBlob); err != nil {
-				log.Printf("collector %s stopped: %v", c.Name(), err)
+			err := c.Start(ctx, emit, emitBlob)
+			// Only flag DOWN on a genuine crash (Start returned while the
+			// context is still live). A return during ctx cancellation is a
+			// normal restart/shutdown and is handled by the next generation.
+			if err != nil && ctx.Err() == nil {
+				log.Printf("collector %s crashed: %v", c.Name(), err)
+				if hr != nil {
+					hr.set(c.Name(), false, err.Error())
+				}
 			}
 		}()
 	}

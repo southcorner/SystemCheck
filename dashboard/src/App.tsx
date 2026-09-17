@@ -13,6 +13,7 @@ import {
   ViewRequest,
   Policy,
   VisitRow,
+  MachineHealth,
   formatBytes,
 } from "./api";
 
@@ -379,7 +380,7 @@ function SettingsView() {
   );
 }
 
-const TABS = ["apps", "screenshots", "browsing", "domains", "transfers", "downloads", "security"] as const;
+const TABS = ["apps", "screenshots", "browsing", "domains", "transfers", "downloads", "security", "health"] as const;
 type Tab = (typeof TABS)[number];
 
 function MachineView({ machine }: { machine: Machine }) {
@@ -404,6 +405,7 @@ function MachineView({ machine }: { machine: Machine }) {
       {tab === "transfers" && <TransfersTab id={machine.id} />}
       {tab === "downloads" && <DownloadsTab id={machine.id} />}
       {tab === "security" && <SecurityTab id={machine.id} />}
+      {tab === "health" && <HealthTab id={machine.id} />}
     </div>
   );
 }
@@ -554,6 +556,47 @@ function ScreenshotsTab({ id }: { id: string }) {
           </figure>
         ))}
       </div>
+    </div>
+  );
+}
+
+function HealthTab({ id }: { id: string }) {
+  const [h, setH] = useState<MachineHealth | null>(null);
+  const load = () => api.health(id).then(setH).catch(() => setH({ collectors: null, health_at: null }));
+  useEffect(() => { load(); }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const cols = h?.collectors || [];
+  return (
+    <div>
+      <div className="muted small" style={{ marginBottom: 8 }}>
+        {h?.health_at ? "Last report " + new Date(h.health_at).toLocaleString() : "No health report yet."}{" "}
+        <button className="link" onClick={load}>Refresh</button>
+      </div>
+      {cols.length === 0 ? (
+        <p className="muted">No collector status reported yet.</p>
+      ) : (
+        <table>
+          <thead>
+            <tr>
+              <th className="left">Collector</th>
+              <th className="left">Status</th>
+              <th className="left">Where</th>
+              <th className="left">Last error</th>
+            </tr>
+          </thead>
+          <tbody>
+            {cols.map((c, i) => (
+              <tr key={c.name + i}>
+                <td className="mono">{c.name}</td>
+                <td style={{ fontWeight: 600, color: c.running ? "#16a34a" : "#dc2626" }}>
+                  {c.running ? "● running" : "● stopped"}
+                </td>
+                <td className="small">{c.role}</td>
+                <td className="small" style={{ color: "#dc2626" }}>{c.error || ""}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
     </div>
   );
 }

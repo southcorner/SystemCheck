@@ -41,6 +41,16 @@ func (a *App) handleMachineDownloads(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, rows)
 }
 
+func (a *App) handleMachineHealth(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	collectors, at, err := a.Store.GetMachineHealth(r.Context(), id)
+	if err != nil {
+		writeErr(w, http.StatusNotFound, "not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"collectors": collectors, "health_at": at})
+}
+
 func (a *App) handleMachineVisits(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	from, to := timeRange(r)

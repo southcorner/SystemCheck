@@ -150,6 +150,27 @@ func (a *App) handleHeartbeat(w http.ResponseWriter, r *http.Request) {
 			_ = a.Store.RecordConsent(r.Context(), hb.InteractiveUser, m.ID, "agent-clickthrough", hb.PolicyVersion)
 		}
 	}
+	// Collector health: store the latest report and alert on any collector that
+	// newly transitioned to DOWN (compared to the previous report), so a stopped
+	// collector (or a killed session helper) surfaces without spamming.
+	if len(hb.Collectors) > 0 {
+		prev, _, _ := a.Store.GetMachineHealth(r.Context(), m.ID)
+		prevDown := map[string]bool{}
+		for _, c := range prev {
+			if !c.Running {
+				prevDown[c.Name] = true
+			}
+		}
+		_ = a.Store.SetMachineHealth(r.Context(), m.ID, hb.Collectors)
+		for _, c := range hb.Collectors {
+			if !c.Running && !prevDown[c.Name] {
+				msg := fmt.Sprintf("Collector %q stopped on %s", c.Name, m.Hostname)
+				_ = a.Store.CreateAlert(r.Context(), "agent_health", m.ID, "warning", msg,
+					map[string]interface{}{"collector": c.Name, "role": c.Role, "error": c.Error})
+			}
+		}
+	}
+
 	// Advertise the latest release so the agent can update promptly on its next
 	// heartbeat rather than waiting for the periodic check.
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "update_version": a.Cfg.AgentLatestVersion})

@@ -38,6 +38,8 @@ export type DownloadRow = {
 };
 export type EventRow = { ts: string; kind: string; data: Record<string, any> };
 export type VisitRow = { ts: string; url: string; title: string; domain: string; browser: string };
+export type CollectorStatus = { name: string; running: boolean; error?: string; role: string };
+export type MachineHealth = { collectors: CollectorStatus[] | null; health_at: string | null };
 
 export type AdminUser = {
   id: string;
@@ -142,6 +144,7 @@ export const api = {
   apps: (id: string) => reqList<AppUsage>(`/api/machines/${id}/apps`),
   domains: (id: string) => reqList<DomainRow>(`/api/machines/${id}/domains`),
   visits: (id: string) => reqList<VisitRow>(`/api/machines/${id}/visits`),
+  health: (id: string) => req<MachineHealth>(`/api/machines/${id}/health`),
   transfers: (id: string) => reqList<TransferRow>(`/api/machines/${id}/transfers`),
   downloads: (id: string) => reqList<DownloadRow>(`/api/machines/${id}/downloads`),
   events: (id: string, kind: string) =>

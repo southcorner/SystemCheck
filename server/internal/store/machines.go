@@ -2,7 +2,10 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"time"
+
+	"github.com/southcorner/systemcheck/server/internal/model"
 )
 
 // Machine is a monitored endpoint.
@@ -86,6 +89,30 @@ func (s *Store) TouchMachine(ctx context.Context, id, agentVersion string) error
 	_, err := s.Pool.Exec(ctx,
 		`UPDATE machines SET last_seen=now(), agent_version=$2 WHERE id=$1`, id, agentVersion)
 	return err
+}
+
+// SetMachineHealth stores the latest collector-status report for a machine.
+func (s *Store) SetMachineHealth(ctx context.Context, id string, collectors []model.CollectorStatus) error {
+	raw, err := json.Marshal(collectors)
+	if err != nil {
+		return err
+	}
+	_, err = s.Pool.Exec(ctx, `UPDATE machines SET collectors=$2, health_at=now() WHERE id=$1`, id, raw)
+	return err
+}
+
+// GetMachineHealth returns the last-reported collector statuses and report time.
+func (s *Store) GetMachineHealth(ctx context.Context, id string) ([]model.CollectorStatus, *time.Time, error) {
+	var raw []byte
+	var at *time.Time
+	if err := s.Pool.QueryRow(ctx, `SELECT collectors, health_at FROM machines WHERE id=$1`, id).Scan(&raw, &at); err != nil {
+		return nil, nil, noRows(err)
+	}
+	var cs []model.CollectorStatus
+	if len(raw) > 0 {
+		_ = json.Unmarshal(raw, &cs)
+	}
+	return cs, at, nil
 }
 
 // SetMachineAssignedUser attributes a machine to a real interactive user. Used

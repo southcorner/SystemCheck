@@ -112,14 +112,27 @@ type Heartbeat struct {
 	// state observed by the user-session helper (via the session handoff file).
 	InteractiveUser string `json:"interactive_user,omitempty"`
 	Consented       bool   `json:"consented,omitempty"`
+	// Collectors is the health of each collector (service + session), so the
+	// server can flag/alert when something that should be running isn't.
+	Collectors []CollectorStatus `json:"collectors,omitempty"`
+}
+
+// CollectorStatus reports whether one collector is running, with its last error.
+type CollectorStatus struct {
+	Name    string `json:"name"`
+	Running bool   `json:"running"`
+	Error   string `json:"error,omitempty"`
+	Role    string `json:"role"` // "service" or "session"
 }
 
 // HeartbeatResponse is the server's reply to a heartbeat. UpdateVersion lets
 // the server nudge the agent to update promptly (on its next ~60s heartbeat)
-// instead of waiting for the periodic update check.
+// instead of waiting for the periodic update check. Command lets the server ask
+// the agent to do something on its next heartbeat ("restart", "sendlog").
 type HeartbeatResponse struct {
 	OK            bool   `json:"ok"`
 	UpdateVersion string `json:"update_version"`
+	Command       string `json:"command,omitempty"`
 }
 
 // SessionState is the handoff file the user-session helper writes into the
@@ -127,9 +140,10 @@ type HeartbeatResponse struct {
 // the monitoring notice. Kept in the (user-writable) spool so the unprivileged
 // helper needs no access to the service's private data dir / certificates.
 type SessionState struct {
-	InteractiveUser string `json:"interactive_user"`
-	Consented       bool   `json:"consented"`
-	UpdatedAt       string `json:"updated_at"`
+	InteractiveUser string            `json:"interactive_user"`
+	Consented       bool              `json:"consented"`
+	UpdatedAt       string            `json:"updated_at"`
+	Collectors      []CollectorStatus `json:"collectors,omitempty"` // session-helper collector health
 }
 
 // Runtime is the handoff file the service writes into the spool dir for the

@@ -141,6 +141,17 @@ type Heartbeat struct {
 	InteractiveUser string `json:"interactive_user,omitempty"`
 	// Consented reports that the user accepted the monitoring notice in-session.
 	Consented bool `json:"consented,omitempty"`
+	// Collectors is the health of each collector, so the server can flag/alert
+	// when something that should be running isn't.
+	Collectors []CollectorStatus `json:"collectors,omitempty"`
+}
+
+// CollectorStatus reports whether one collector is running, with its last error.
+type CollectorStatus struct {
+	Name    string `json:"name"`
+	Running bool   `json:"running"`
+	Error   string `json:"error,omitempty"`
+	Role    string `json:"role"`
 }
 
 // DefaultPolicy returns a conservative, privacy-first default policy that is
