@@ -166,6 +166,18 @@ func (a *App) handleHeartbeat(w http.ResponseWriter, r *http.Request) {
 	// newly transitioned to DOWN (compared to the previous report), so a stopped
 	// collector (or a killed session helper) surfaces without spamming.
 	if len(hb.Collectors) > 0 {
+		// Reconcile: a collector reported DOWN but whose data is still arriving
+		// is actually running (e.g. an older session helper that hasn't started
+		// reporting health yet after a service auto-update). Prevents false
+		// "stopped" status + alerts during the update window.
+		recentSince := time.Now().Add(-20 * time.Minute)
+		for i := range hb.Collectors {
+			c := &hb.Collectors[i]
+			if !c.Running && a.Store.HasRecentCollectorData(r.Context(), m.ID, c.Name, recentSince) {
+				c.Running = true
+				c.Error = ""
+			}
+		}
 		prev, _, _ := a.Store.GetMachineHealth(r.Context(), m.ID)
 		prevDown := map[string]bool{}
 		for _, c := range prev {

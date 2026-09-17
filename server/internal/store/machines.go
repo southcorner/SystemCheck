@@ -173,6 +173,30 @@ func (s *Store) ConsumePendingCommand(ctx context.Context, id string) (string, e
 	return *cmd, nil
 }
 
+// HasRecentCollectorData reports whether a (session) collector's data has
+// arrived recently - used to reconcile a "down" report with reality (e.g. an
+// old session helper not yet reporting health after a service auto-update).
+func (s *Store) HasRecentCollectorData(ctx context.Context, machineID, collector string, since time.Time) bool {
+	var q string
+	var args []any
+	switch collector {
+	case "screenshot":
+		q = `SELECT EXISTS(SELECT 1 FROM screenshots WHERE machine_id=$1 AND ts>$2)`
+		args = []any{machineID, since}
+	case "foreground", "fswatch", "browsing":
+		kind := map[string]string{"foreground": "foreground", "fswatch": "download", "browsing": "visit"}[collector]
+		q = `SELECT EXISTS(SELECT 1 FROM events WHERE machine_id=$1 AND kind=$3 AND ts>$2)`
+		args = []any{machineID, since, kind}
+	default:
+		return false
+	}
+	var ok bool
+	if err := s.Pool.QueryRow(ctx, q, args...).Scan(&ok); err != nil {
+		return false
+	}
+	return ok
+}
+
 // SetMachineHealth stores the latest collector-status report for a machine.
 func (s *Store) SetMachineHealth(ctx context.Context, id string, collectors []model.CollectorStatus) error {
 	raw, err := json.Marshal(collectors)
