@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"log"
 	"os"
 
 	"golang.org/x/sys/windows/svc"
@@ -35,7 +36,15 @@ func (h *handler) Execute(_ []string, r <-chan svc.ChangeRequest, s chan<- svc.S
 		switch req.Cmd {
 		case svc.Interrogate:
 			s <- req.CurrentStatus
-		case svc.Stop, svc.Shutdown:
+		case svc.Stop:
+			// A manual stop (Stop-Service / sc stop), i.e. someone turned the
+			// agent off - record it clearly for later review.
+			log.Printf("INDICATOR: service STOP requested (manual stop) - monitoring is being turned off")
+			s <- svc.Status{State: svc.StopPending}
+			cancel()
+			return false, 0
+		case svc.Shutdown:
+			log.Printf("service shutdown (system shutting down)")
 			s <- svc.Status{State: svc.StopPending}
 			cancel()
 			return false, 0

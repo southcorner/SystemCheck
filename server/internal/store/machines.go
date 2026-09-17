@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/southcorner/systemcheck/server/internal/model"
@@ -84,11 +85,47 @@ func (s *Store) SetMachineNickname(ctx context.Context, id, nickname string) err
 	return err
 }
 
-// TouchMachine updates last_seen and agent version on heartbeat.
+// TouchMachine updates last_seen and agent version on heartbeat, and clears the
+// offline-alert flag (the machine is reporting again).
 func (s *Store) TouchMachine(ctx context.Context, id, agentVersion string) error {
 	_, err := s.Pool.Exec(ctx,
-		`UPDATE machines SET last_seen=now(), agent_version=$2 WHERE id=$1`, id, agentVersion)
+		`UPDATE machines SET last_seen=now(), agent_version=$2, offline_alerted=false WHERE id=$1`, id, agentVersion)
 	return err
+}
+
+// SweepOfflineMachines raises an "agent_offline" alert (once) for each active
+// machine that has stopped reporting since staleBefore and hasn't been alerted
+// for this outage yet. Returns how many alerts were raised.
+func (s *Store) SweepOfflineMachines(ctx context.Context, staleBefore time.Time) (int, error) {
+	rows, err := s.Pool.Query(ctx,
+		`SELECT id, hostname FROM machines
+		  WHERE active AND last_seen IS NOT NULL AND last_seen < $1 AND NOT offline_alerted`, staleBefore)
+	if err != nil {
+		return 0, err
+	}
+	type m struct{ id, hostname string }
+	var stale []m
+	for rows.Next() {
+		var x m
+		if err := rows.Scan(&x.id, &x.hostname); err != nil {
+			rows.Close()
+			return 0, err
+		}
+		stale = append(stale, x)
+	}
+	rows.Close()
+	n := 0
+	for _, x := range stale {
+		if err := s.CreateAlert(ctx, "agent_offline", x.id, "warning",
+			fmt.Sprintf("Agent offline: %s stopped reporting", x.hostname),
+			map[string]interface{}{"hostname": x.hostname}); err != nil {
+			continue
+		}
+		if _, err := s.Pool.Exec(ctx, `UPDATE machines SET offline_alerted=true WHERE id=$1`, x.id); err == nil {
+			n++
+		}
+	}
+	return n, nil
 }
 
 // SetPendingCommand queues a one-shot command for a machine's next heartbeat.

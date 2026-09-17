@@ -64,6 +64,7 @@ func main() {
 	}
 
 	go runPurgeLoop(ctx, st, bl, cfg)
+	go runOfflineSweep(ctx, st)
 
 	srv := &http.Server{
 		Addr:              cfg.ListenAddr,
@@ -86,6 +87,26 @@ func main() {
 	shutCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	_ = srv.Shutdown(shutCtx)
+}
+
+// runOfflineSweep periodically raises an alert for machines that have stopped
+// heartbeating (agent service stopped/killed), once per outage.
+func runOfflineSweep(ctx context.Context, st *store.Store) {
+	const staleAfter = 15 * time.Minute
+	ticker := time.NewTicker(3 * time.Minute)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if n, err := st.SweepOfflineMachines(ctx, time.Now().Add(-staleAfter)); err != nil {
+				log.Printf("offline sweep: %v", err)
+			} else if n > 0 {
+				log.Printf("offline sweep: raised %d agent-offline alert(s)", n)
+			}
+		}
+	}
 }
 
 // runPurgeLoop enforces retention windows once at startup and then daily.
