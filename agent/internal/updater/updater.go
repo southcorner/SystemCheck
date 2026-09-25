@@ -12,10 +12,83 @@ import (
 	"context"
 	"crypto/ed25519"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
+	"log"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 )
+
+// Install-attempt back-off. If a release is downloaded and installed but the
+// agent keeps coming back on the OLD version (a swap that silently fails, e.g.
+// the binary could not be replaced), then without a guard every agent start
+// re-downloads and re-restarts - a fleet-wide download/restart storm. So each
+// target version gets a bounded number of attempts before we back off and wait.
+const (
+	maxInstallAttempts = 3
+	attemptCooldown    = 6 * time.Hour
+)
+
+// attemptRecord persists how many times we have tried to install a version.
+type attemptRecord struct {
+	Version string    `json:"version"`
+	Count   int       `json:"count"`
+	At      time.Time `json:"at"`
+}
+
+// attemptPath is the state file, kept next to the agent binary.
+func attemptPath() string {
+	exe, err := os.Executable()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(filepath.Dir(exe), "update-attempt.json")
+}
+
+func loadAttempt() attemptRecord {
+	var rec attemptRecord
+	p := attemptPath()
+	if p == "" {
+		return rec
+	}
+	data, err := os.ReadFile(p)
+	if err != nil {
+		return rec
+	}
+	_ = json.Unmarshal(data, &rec)
+	return rec
+}
+
+// shouldAttempt reports whether we may try to install target now, and returns
+// the record to carry the attempt count forward.
+func shouldAttempt(target string) (attemptRecord, bool) {
+	rec := loadAttempt()
+	if rec.Version != target {
+		return attemptRecord{Version: target}, true // new target: fresh budget
+	}
+	if rec.Count < maxInstallAttempts {
+		return rec, true
+	}
+	if time.Since(rec.At) > attemptCooldown {
+		return attemptRecord{Version: target}, true // cooled down: try again
+	}
+	return rec, false
+}
+
+func saveAttempt(rec attemptRecord) {
+	p := attemptPath()
+	if p == "" {
+		return
+	}
+	rec.At = time.Now()
+	rec.Count++
+	if data, err := json.Marshal(rec); err == nil {
+		_ = os.WriteFile(p, data, 0o600)
+	}
+}
 
 // PinnedPublicKey is the base64 ed25519 public key releases are signed with.
 // Empty (the default) disables self-update entirely.
@@ -51,6 +124,13 @@ func CheckAndUpdate(ctx context.Context, current string, info VersionInfo, get G
 	if info.Signature == "" {
 		return false, errors.New("release has no signature")
 	}
+	// Don't re-download a version we have already tried and failed to become.
+	rec, ok := shouldAttempt(info.Version)
+	if !ok {
+		log.Printf("update: still on %s after %d attempts at %s; backing off until %s",
+			current, rec.Count, info.Version, rec.At.Add(attemptCooldown).Format(time.RFC3339))
+		return false, nil
+	}
 	data, err := get(ctx, info.URL)
 	if err != nil {
 		return false, err
@@ -58,6 +138,9 @@ func CheckAndUpdate(ctx context.Context, current string, info VersionInfo, get G
 	if !verify(PinnedPublicKey, info.Signature, data) {
 		return false, errors.New("release signature verification failed")
 	}
+	// Record before installing: the install restarts the service, so code after
+	// it is not guaranteed to run.
+	saveAttempt(rec)
 	if err := install(data); err != nil {
 		return false, err
 	}
