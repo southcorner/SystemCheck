@@ -1,6 +1,6 @@
 // Package fswatch detects files DOWNLOADED FROM THE INTERNET, independent of
 // which browser, browser profile, or download folder the user chose. It watches
-// the user's file tree (profile + removable drives, plus any policy folders) and
+// every local drive (all fixed + removable roots, plus any policy folders) and
 // records a file only when it carries an internet "Mark of the Web"
 // (Zone.Identifier ADS with ZoneId >= 3) - the tag Windows/SmartScreen attaches
 // to internet downloads from every mainstream browser. That yields the file
@@ -27,9 +27,11 @@ import (
 // download (and its Zone.Identifier stream, written last) has finished.
 const settleDelay = 2 * time.Second
 
-// maxWatchedDirs caps how many directories we register, so watching a large
-// profile tree can't exhaust handles on a busy machine.
-const maxWatchedDirs = 6000
+// maxWatchedDirs caps how many directories we register, so watching every local
+// drive can't exhaust handles on a busy machine. Higher than the old
+// profile-only cap because we now cover all fixed+removable drives; excludeDir
+// prunes the big system trees so real machines stay well under this.
+const maxWatchedDirs = 20000
 
 // Collector watches for downloaded files.
 type Collector struct {
@@ -110,11 +112,19 @@ func (c *Collector) Start(ctx context.Context, emit collectors.Emit, _ collector
 	}
 }
 
-type dirCounter struct{ n int }
+type dirCounter struct {
+	n    int
+	seen map[string]bool
+}
 
 // addTree registers dir and its subdirectories with the watcher, skipping
-// high-churn/system trees and honouring the watch cap. Best-effort.
+// high-churn/system trees, de-duplicating across overlapping roots (the profile
+// lives under a drive root we also walk), and honouring the watch cap.
+// Best-effort.
 func addTree(w *fsnotify.Watcher, root string, c *dirCounter) {
+	if c.seen == nil {
+		c.seen = map[string]bool{}
+	}
 	_ = filepath.WalkDir(root, func(p string, d os.DirEntry, err error) error {
 		if err != nil {
 			return nil // unreadable entry: skip, keep walking
@@ -125,10 +135,15 @@ func addTree(w *fsnotify.Watcher, root string, c *dirCounter) {
 		if excludeDir(p) {
 			return filepath.SkipDir
 		}
+		key := strings.ToLower(filepath.Clean(p))
+		if c.seen[key] {
+			return filepath.SkipDir // already registered via an earlier root
+		}
 		if c.n >= maxWatchedDirs {
 			return filepath.SkipDir
 		}
 		if w.Add(p) == nil {
+			c.seen[key] = true
 			c.n++
 		}
 		return nil
